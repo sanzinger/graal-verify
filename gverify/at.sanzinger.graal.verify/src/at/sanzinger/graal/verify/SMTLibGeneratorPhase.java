@@ -1,7 +1,5 @@
 package at.sanzinger.graal.verify;
 
-import static at.sanzinger.graal.verify.gen.OperatorDescription.UNBOUNDED_INPUTS;
-
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -16,6 +14,7 @@ import at.sanzinger.graal.verify.gen.OperatorDescription;
 import com.oracle.graal.compiler.common.type.PrimitiveStamp;
 import com.oracle.graal.debug.TTY;
 import com.oracle.graal.graph.Node;
+import com.oracle.graal.graph.NodeClass;
 import com.oracle.graal.graph.iterators.NodeIterable;
 import com.oracle.graal.nodes.ConstantNode;
 import com.oracle.graal.nodes.EndNode;
@@ -39,35 +38,42 @@ import com.oracle.graal.phases.BasePhase;
 import com.oracle.graal.phases.tiers.LowTierContext;
 
 public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
-    private static final IdentityHashMap<Class<? extends ValueNode>, OperatorDescription<?>> n2o = new IdentityHashMap<>();
+    private static final IdentityHashMap<NodeClass<? extends ValueNode>, OperatorDescription<?>> n2o = new IdentityHashMap<>();
 
     // @formatter:off
     @Option(help = "Dump SMT-V2 representation of the graphs into this directory", type=OptionType.User)
     private static final OptionValue<String> DumpSMTDir = new OptionValue<>(null);
     // @formatter:on
 
-    private static <T extends ValueNode> void n2o(Class<T> clazz, String opName, int inputs) {
-        n2o.put(clazz, new OperatorDescription<T>(inputs, (n) -> defaultDeclaration(n), (n) -> defaultDefinition(opName, n)));
+    private static <T extends ValueNode> void n2o(NodeClass<T> nodeClass, String opName) {
+        n2o.put(nodeClass, new OperatorDescription<>(nodeClass, (n) -> defaultDeclaration(n), (n) -> defaultDefinition(opName, n)));
+    }
+
+    private static <T extends ValueNode> void n2o(OperatorDescription<T> d) {
+        n2o.put(d.getNodeClass(), d);
     }
 
     static {
-        n2o(NotNode.class, "bvnot", 1);
-        n2o(NegateNode.class, "bvneg", 1);
-        n2o(AndNode.class, "bvand", 2);
-        n2o(OrNode.class, "bvor", 2);
-        n2o(AddNode.class, "bvadd", 2);
-        n2o(SubNode.class, "bvsub", 2);
-        n2o(MulNode.class, "bvmul", 2);
-        n2o(ParameterNode.class, "", 0);
-        n2o(IntegerLessThanNode.class, "bvslt", 2);
-        n2o(IntegerEqualsNode.class, "=", 2);
-        n2o.put(IfNode.class, new OperatorDescription<>(1, SMTLibGeneratorPhase::booleanDeclaration, SMTLibGeneratorPhase::ifDefinition));
-        n2o.put(PhiNode.class, new OperatorDescription<>(UNBOUNDED_INPUTS, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::phiDefinition));
-        n2o.put(ValuePhiNode.class, new OperatorDescription<>(UNBOUNDED_INPUTS, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::phiDefinition));
-        n2o.put(ConstantNode.class, new OperatorDescription<>(0, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::defineConstant));
+        n2o(NotNode.TYPE, "bvnot");
+        n2o(NegateNode.TYPE, "bvneg");
+        n2o(AndNode.TYPE, "bvand");
+        n2o(OrNode.TYPE, "bvor");
+        n2o(AddNode.TYPE, "bvadd");
+        n2o(SubNode.TYPE, "bvsub");
+        n2o(MulNode.TYPE, "bvmul");
+        n2o(ParameterNode.TYPE, null);
+        n2o(IntegerLessThanNode.TYPE, "bvslt");
+        n2o(IntegerEqualsNode.TYPE, "=");
+        n2o(new OperatorDescription<>(IfNode.TYPE, SMTLibGeneratorPhase::booleanDeclaration, SMTLibGeneratorPhase::ifDefinition));
+        n2o(new OperatorDescription<>(PhiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::phiDefinition));
+        n2o(new OperatorDescription<>(ValuePhiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::phiDefinition));
+        n2o(new OperatorDescription<>(ConstantNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::defineConstant));
     }
 
     private static String defaultDefinition(String opName, ValueNode n) {
+        if (opName == null) {
+            return null;
+        }
         StringBuilder sb = new StringBuilder();
         if (n.inputs().count() > 0) {
             sb.append("(assert (= ");
@@ -185,10 +191,10 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         for (Node n : graph.getNodes()) {
             if (n instanceof ValueNode) {
                 @SuppressWarnings("unchecked")
-                OperatorDescription<ValueNode> d = (OperatorDescription<ValueNode>) n2o.get(n.getClass());
+                OperatorDescription<ValueNode> d = (OperatorDescription<ValueNode>) n2o.get(n.getNodeClass());
                 if (d != null) {
-                    declarations.append(d.getDeclaration().apply((ValueNode) n) + "\n");
-                    definitions.append(d.getDefinition().apply((ValueNode) n) + "\n");
+                    appendCrNonNull(declarations, d.getDeclaration().apply((ValueNode) n));
+                    appendCrNonNull(definitions, d.getDefinition().apply((ValueNode) n));
                 }
             }
         }
@@ -199,6 +205,13 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             writeToFile(outfile, prologue, declarations, definitions);
         } catch (IOException e) {
             TTY.println("Cannot write file to %s %s", outfile, e);
+        }
+    }
+
+    private static void appendCrNonNull(StringBuilder sb, String v) {
+        if (v != null) {
+            sb.append(v);
+            sb.append('\n');
         }
     }
 
