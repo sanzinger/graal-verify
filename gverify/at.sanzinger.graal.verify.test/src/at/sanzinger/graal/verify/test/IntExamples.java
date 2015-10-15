@@ -64,4 +64,21 @@ public class IntExamples extends VerificationTest {
         compile("addInverseSnippet");
     }
 
+    public static int negativeInverseThreeSnippet(int a, int c) {
+        int x;
+        if (c == 1) {
+            x = a - 1;
+        } else if (c == 2) {
+            x = 42;
+        } else {
+            x = ~-a;
+        }
+        return x + c;
+    }
+
+    @Test
+    public void negativeInverseThree() {
+        compile("negativeInverseThreeSnippet");
+    }
+
 }

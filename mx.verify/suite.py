@@ -36,7 +36,8 @@ suite = {
       "sourceDirs" : ["src"],
       "javaCompliance" : "1.8",
       "dependencies" : [
-        "graal:GRAAL_TEST"
+        "graal:GRAAL_TEST",
+	"at.sanzinger.graal.verify",
       ],
       "workingSets" : "Verification",
     },
@@ -46,6 +47,9 @@ suite = {
       "sourceDirs" : ["src"],
       "javaCompliance" : "1.8",
       "workingSets" : "Verification",
+      "dependencies" : [
+	"graal:GRAAL_COMPILER",
+      ],
     },
 
   },
