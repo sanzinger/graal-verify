@@ -27,12 +27,14 @@ import com.oracle.graal.nodes.ValueNode;
 import com.oracle.graal.nodes.ValuePhiNode;
 import com.oracle.graal.nodes.calc.AddNode;
 import com.oracle.graal.nodes.calc.AndNode;
+import com.oracle.graal.nodes.calc.DivNode;
 import com.oracle.graal.nodes.calc.IntegerEqualsNode;
 import com.oracle.graal.nodes.calc.IntegerLessThanNode;
 import com.oracle.graal.nodes.calc.MulNode;
 import com.oracle.graal.nodes.calc.NegateNode;
 import com.oracle.graal.nodes.calc.NotNode;
 import com.oracle.graal.nodes.calc.OrNode;
+import com.oracle.graal.nodes.calc.RemNode;
 import com.oracle.graal.nodes.calc.SubNode;
 import com.oracle.graal.phases.BasePhase;
 import com.oracle.graal.phases.tiers.LowTierContext;
@@ -55,12 +57,14 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
 
     static {
         n2o(NotNode.TYPE, "bvnot");
-        n2o(NegateNode.TYPE, "bvneg");
         n2o(AndNode.TYPE, "bvand");
         n2o(OrNode.TYPE, "bvor");
+        n2o(NegateNode.TYPE, "bvneg");
         n2o(AddNode.TYPE, "bvadd");
         n2o(SubNode.TYPE, "bvsub");
         n2o(MulNode.TYPE, "bvmul");
+        n2o(DivNode.TYPE, "bvsdiv");
+        n2o(RemNode.TYPE, "bvsrem");
         n2o(ParameterNode.TYPE, null);
         n2o(IntegerLessThanNode.TYPE, "bvslt");
         n2o(IntegerEqualsNode.TYPE, "=");
