@@ -5,21 +5,17 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.IdentityHashMap;
 
-import jdk.vm.ci.meta.PrimitiveConstant;
-import jdk.vm.ci.options.Option;
-import jdk.vm.ci.options.OptionType;
-import jdk.vm.ci.options.OptionValue;
-import at.sanzinger.graal.verify.gen.OperatorDescription;
-
 import com.oracle.graal.compiler.common.type.PrimitiveStamp;
 import com.oracle.graal.debug.TTY;
 import com.oracle.graal.graph.Node;
 import com.oracle.graal.graph.NodeClass;
 import com.oracle.graal.graph.iterators.NodeIterable;
+import com.oracle.graal.nodes.AbstractMergeNode;
 import com.oracle.graal.nodes.ConstantNode;
-import com.oracle.graal.nodes.EndNode;
 import com.oracle.graal.nodes.IfNode;
 import com.oracle.graal.nodes.LogicNode;
+import com.oracle.graal.nodes.LoopBeginNode;
+import com.oracle.graal.nodes.MergeNode;
 import com.oracle.graal.nodes.ParameterNode;
 import com.oracle.graal.nodes.PhiNode;
 import com.oracle.graal.nodes.StructuredGraph;
@@ -38,6 +34,12 @@ import com.oracle.graal.nodes.calc.RemNode;
 import com.oracle.graal.nodes.calc.SubNode;
 import com.oracle.graal.phases.BasePhase;
 import com.oracle.graal.phases.tiers.LowTierContext;
+
+import at.sanzinger.graal.verify.gen.OperatorDescription;
+import jdk.vm.ci.meta.PrimitiveConstant;
+import jdk.vm.ci.options.Option;
+import jdk.vm.ci.options.OptionType;
+import jdk.vm.ci.options.OptionValue;
 
 public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     private static final IdentityHashMap<NodeClass<? extends ValueNode>, OperatorDescription<?>> n2o = new IdentityHashMap<>();
@@ -114,12 +116,22 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         StringBuilder closing = new StringBuilder();
         sb.append("(assert ");
         int i = 0;
-        NodeIterable<EndNode> pred = n.merge().cfgPredecessors();
+        AbstractMergeNode merge = n.merge();
+        Iterable<? extends Node> pred = null;
+        int count = 0;
+        if (merge instanceof MergeNode) {
+            NodeIterable<? extends Node> predNodeIter = n.merge().cfgPredecessors();
+            pred = predNodeIter;
+            count = predNodeIter.count();
+
+        } else if (merge instanceof LoopBeginNode) {
+            return null;
+        }
         for (Node en : pred) {
             IfSuccessorPair ifNodeSucc = findDominatingIfNode(en);
             IfNode ifNode = ifNodeSucc.ifNode;
             sb.append("(");
-            if (i + 1 < pred.count()) {
+            if (i + 1 < count) {
                 sb.append("xor ");
             }
             sb.append("(and (");

@@ -81,4 +81,17 @@ public class IntExamples extends VerificationTest {
         compile("negativeInverseThreeSnippet");
     }
 
+    public static int countingLoopSnippet(int c) {
+        int i = 0;
+        while (i < c) {
+            i++;
+        }
+        return i;
+    }
+
+    @Test
+    public void countingLoop() {
+        compile("countingLoopSnippet");
+    }
+
 }
