@@ -114,7 +114,9 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     private static String phiDefinition(PhiNode n) {
         StringBuilder sb = new StringBuilder();
         StringBuilder closing = new StringBuilder();
-        sb.append("(assert ");
+        sb.append("(assert (= ");
+        sb.append(getNodeString(n));
+        sb.append(" ");
         int i = 0;
         AbstractMergeNode merge = n.merge();
         Iterable<? extends Node> pred = null;
@@ -132,23 +134,22 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             IfNode ifNode = ifNodeSucc.ifNode;
             sb.append("(");
             if (i + 1 < count) {
-                sb.append("xor ");
+                sb.append("ite ");
+                sb.append("(");
+                if (!ifNodeSucc.trueSuccessor) {
+                    sb.append("not ");
+                }
+                sb.append(getNodeString(ifNode));
+                sb.append(") ");
             }
-            sb.append("(and (");
-            if (!ifNodeSucc.trueSuccessor) {
-                sb.append("not ");
-            }
-            sb.append(getNodeString(ifNode));
-            sb.append(") (= ");
-            sb.append(getNodeString(n));
             sb.append(' ');
             sb.append(getNodeString(n.valueAt(i)));
-            sb.append(")) ");
+            sb.append(' ');
             closing.append(")");
             i++;
         }
         sb.append(closing);
-        sb.append(")");
+        sb.append("))");
         return sb.toString();
     }
 
