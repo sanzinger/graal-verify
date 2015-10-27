@@ -61,6 +61,17 @@ suite = {
       ],
     },
 
+    "at.sanzinger.boolector.test" : {
+      "subDir" : "gverify",
+      "sourceDirs" : ["src"],
+      "javaCompliance" : "1.8",
+      "workingSets" : "Verification",
+      "dependencies" : [
+	"mx:JUNIT",
+	"at.sanzinger.boolector",
+      ],
+    },
+
   },
 
   "distributions" : {
