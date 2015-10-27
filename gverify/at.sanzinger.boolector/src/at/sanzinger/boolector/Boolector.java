@@ -26,4 +26,8 @@ public class Boolector {
     public File getBtorBinary() {
         return btorBinary;
     }
+
+    public BoolectorInstance newInstance() {
+        return new BoolectorInstance(this);
+    }
 }

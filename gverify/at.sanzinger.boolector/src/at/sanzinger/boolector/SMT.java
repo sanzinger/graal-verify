@@ -37,5 +37,10 @@ public class SMT {
         public String getCheck() {
             return check;
         }
+
+        @Override
+        public String toString() {
+            return check.trim();
+        }
     }
 }
