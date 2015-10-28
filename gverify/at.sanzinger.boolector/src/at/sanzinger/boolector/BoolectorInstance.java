@@ -1,5 +1,6 @@
 package at.sanzinger.boolector;
 
+import static java.lang.System.lineSeparator;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import java.io.IOException;
@@ -60,6 +61,7 @@ public class BoolectorInstance implements AutoCloseable {
     public SMTResult[] execute(SMT smt) {
         ensureOpen();
         out.write(smt.getModel());
+        out.flush();
         SMTResult[] results = new SMTResult[smt.getChecks().size()];
         int i = 0;
         try {
@@ -69,15 +71,14 @@ public class BoolectorInstance implements AutoCloseable {
                 out.println("(check-sat)");
                 out.flush();
                 List<String> lines = waitForOutputLine(1000, "sat", "unsat");
-                String err = readLineWithTimeout(p.getErrorStream(), 1);
-                if (err != null) {
-                    System.err.println(err);
+                StringBuilder err = new StringBuilder();
+                while (errIs.available() > 0) {
+                    err.append(lineSeparator());
+                    err.append(readLineWithTimeout(errIs, 1));
                 }
                 out.println("(pop 1)");
                 out.flush();
-                if (lines != null) {
-                    results[i] = new SMTResult(c, lines);
-                }
+                results[i] = new SMTResult(c, lines, err.length() > 0 ? err.substring(lineSeparator().length()) : null);
                 i++;
             }
         } catch (IOException | InterruptedException e) {
@@ -104,7 +105,7 @@ public class BoolectorInstance implements AutoCloseable {
             int lineend = line.indexOf(System.lineSeparator());
             if (lineend != -1) {
                 is.reset();
-                is.skip(lineend);
+                is.skip(lineend + 1);
                 return line;
             }
             offset += read;

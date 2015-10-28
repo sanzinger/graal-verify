@@ -1,10 +1,8 @@
 package at.sanzinger.boolector.test;
 
 import static java.lang.System.currentTimeMillis;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static java.lang.System.lineSeparator;
+import static org.junit.Assert.*;
 
 import java.io.File;
 import java.io.IOException;
@@ -59,7 +57,9 @@ public class BoolectorTest {
             SMTResult[] r = i.execute(s);
             assertEquals(2, r.length);
             assertEquals("unsat", r[0].status());
+            assertNull(r[0].getError());
             assertEquals("sat", r[1].status());
+            assertNull(r[1].getError());
         }
     }
 
@@ -73,12 +73,23 @@ public class BoolectorTest {
             assertFalse(i.isRunning());
             SMTResult[] r = i.execute(s);
             assertEquals("sat", r[0].status());
+            assertNull(r[0].getError());
             assertTrue(i.isRunning());
             escape = i;
         }
         assertTrue("Must be executed in less than 50 ms", currentTimeMillis() - start < 50);
 
         assertFalse(escape.isRunning());
+    }
+
+    @Test
+    public void testSinlgelineError() throws Exception {
+        try (BoolectorInstance i = btor.newInstance()) {
+            SMT s = new SMT("(set-logic UNKNOWN)");
+            s.addCheck(new Check(""));
+            SMTResult[] r = i.execute(s);
+            assertEquals("boolector: <stdin>:1:12: expected logic at 'UNKNOWN'" + lineSeparator(), r[0].getError());
+        }
     }
 
     /**
