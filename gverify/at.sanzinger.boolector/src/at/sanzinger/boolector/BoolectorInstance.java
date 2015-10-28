@@ -143,6 +143,7 @@ public class BoolectorInstance implements AutoCloseable {
         }
         out.println();
         out.println("(exit)");
+        out.flush();
         try {
             p.waitFor(1, SECONDS);
         } catch (InterruptedException ie) {

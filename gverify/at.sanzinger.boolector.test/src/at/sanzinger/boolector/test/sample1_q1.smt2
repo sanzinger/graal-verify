@@ -1,1 +1,1 @@
-(assert (not (= n12 n19)))
+(assert (not (= n12 n9)))

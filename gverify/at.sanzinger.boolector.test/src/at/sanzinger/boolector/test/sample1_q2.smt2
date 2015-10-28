@@ -1,1 +1,1 @@
-(assert (= n12 n19))
+(assert (= n12 n9))

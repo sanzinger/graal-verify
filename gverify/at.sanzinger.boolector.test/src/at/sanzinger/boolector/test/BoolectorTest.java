@@ -1,13 +1,15 @@
 package at.sanzinger.boolector.test;
 
+import static java.lang.System.currentTimeMillis;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.CharBuffer;
-import java.util.Arrays;
 
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -17,6 +19,7 @@ import at.sanzinger.boolector.Boolector;
 import at.sanzinger.boolector.BoolectorInstance;
 import at.sanzinger.boolector.SMT;
 import at.sanzinger.boolector.SMT.Check;
+import at.sanzinger.boolector.SMTResult;
 
 public class BoolectorTest {
     private static String BTOR_HOME;
@@ -53,8 +56,29 @@ public class BoolectorTest {
         s.addCheck(new Check(rr("sample1_q1.smt2")));
         s.addCheck(new Check(rr("sample1_q2.smt2")));
         try (BoolectorInstance i = btor.newInstance()) {
-            System.out.println(Arrays.toString(i.execute(s)));
+            SMTResult[] r = i.execute(s);
+            assertEquals(2, r.length);
+            assertEquals("unsat", r[0].status());
+            assertEquals("sat", r[1].status());
         }
+    }
+
+    @Test
+    public void testAutoclose() throws Exception {
+        BoolectorInstance escape;
+        long start = currentTimeMillis();
+        try (BoolectorInstance i = btor.newInstance()) {
+            SMT s = new SMT("");
+            s.addCheck(new Check(""));
+            assertFalse(i.isRunning());
+            SMTResult[] r = i.execute(s);
+            assertEquals("sat", r[0].status());
+            assertTrue(i.isRunning());
+            escape = i;
+        }
+        assertTrue("Must be executed in less than 50 ms", currentTimeMillis() - start < 50);
+
+        assertFalse(escape.isRunning());
     }
 
     /**
