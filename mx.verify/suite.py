@@ -79,5 +79,11 @@ suite = {
   },
 
   "distributions" : {
+    "GRAAL_VERIFY" : {
+      "subDir" : "gverify",
+      "dependencies" : [
+        "at.sanzinger.graal.verify",
+      ],
+    },
   },
 }

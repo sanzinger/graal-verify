@@ -3,7 +3,10 @@ package at.sanzinger.graal.verify;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.IdentityHashMap;
+import java.util.List;
 
 import com.oracle.graal.compiler.common.type.PrimitiveStamp;
 import com.oracle.graal.debug.TTY;
@@ -35,6 +38,10 @@ import com.oracle.graal.nodes.calc.SubNode;
 import com.oracle.graal.phases.BasePhase;
 import com.oracle.graal.phases.tiers.LowTierContext;
 
+import at.sanzinger.boolector.Boolector;
+import at.sanzinger.boolector.BoolectorInstance;
+import at.sanzinger.boolector.SMT;
+import at.sanzinger.boolector.SMT.Check;
 import at.sanzinger.graal.verify.gen.OperatorDescription;
 import jdk.vm.ci.meta.PrimitiveConstant;
 import jdk.vm.ci.options.Option;
@@ -47,6 +54,9 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     // @formatter:off
     @Option(help = "Dump SMT-V2 representation of the graphs into this directory", type=OptionType.User)
     private static final OptionValue<String> DumpSMTDir = new OptionValue<>(null);
+
+    @Option(help = "Boolector binary", type=OptionType.User)
+    private static final OptionValue<String> Btor = new OptionValue<>(null);
     // @formatter:on
 
     private static <T extends ValueNode> void n2o(NodeClass<T> nodeClass, String opName) {
@@ -205,6 +215,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         String prologue = "(set-logic QF_BV)";
         StringBuilder declarations = new StringBuilder();
         StringBuilder definitions = new StringBuilder();
+        List<Node> definedNodes = new ArrayList<>();
         for (Node n : graph.getNodes()) {
             if (n instanceof ValueNode) {
                 @SuppressWarnings("unchecked")
@@ -212,9 +223,18 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
                 if (d != null) {
                     appendCrNonNull(declarations, d.getDeclaration().apply((ValueNode) n));
                     appendCrNonNull(definitions, d.getDefinition().apply((ValueNode) n));
+                    definedNodes.add(n);
                 }
             }
         }
+        SMT smt = new SMT(prologue + declarations + definitions);
+        check(smt, definedNodes);
+        if(!DumpSMTDir.hasDefaultValue()) {
+            dumpSMT(graph, prologue, declarations, definitions);
+        }
+    }
+
+    private void dumpSMT(StructuredGraph graph, String prologue, StringBuilder declarations, StringBuilder definitions) {
         String filename = graph.method().format("%h_%n_(%p).smt2").replace(' ', '_');
         File outfile = new File(DumpSMTDir.getValue(), filename);
         try {
@@ -222,6 +242,27 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             writeToFile(outfile, prologue, declarations, definitions);
         } catch (IOException e) {
             TTY.println("Cannot write file to %s %s", outfile, e);
+        }
+    }
+
+    private static void check(SMT smt, List<Node> definedNodes) {
+        if (!Btor.hasDefaultValue()) {
+            addEqualityChecks(smt, definedNodes);
+            Boolector btor = new Boolector(Btor.getDefaultValue());
+            try (BoolectorInstance i = btor.newInstance()) {
+                System.out.println(Arrays.toString(i.execute(smt)));
+            }
+        }
+    }
+
+    private static void addEqualityChecks(SMT smt, List<Node> definedNodes) {
+        int sz = definedNodes.size();
+        for (int i = 0; i < sz; i++) {
+            String n1 = getNodeString(definedNodes.get(i));
+            for (int j = 0; j < sz; j++) {
+                String n2 = getNodeString(definedNodes.get(j));
+                smt.addCheck(new Check("(assert (not (=" + n1 + " " + n2 + ")))"));
+            }
         }
     }
 
