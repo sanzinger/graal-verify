@@ -17,15 +17,27 @@ public class SMTResult {
     }
 
     public String status() {
-        return lines.get(lines.size() - 1);
+        return lines == null ? null : lines.get(lines.size() - 1);
     }
 
     public String getError() {
         return error;
     }
 
+    public boolean isSat() {
+        return "sat".equals(status());
+    }
+
+    public boolean isError() {
+        return error != null;
+    }
+
+    public Check getCheck() {
+        return check;
+    }
+
     @Override
     public String toString() {
-        return String.format("SMTResult: %s: %s", check.toString(), status());
+        return String.format("SMTResult: %s: %s %s", check.toString(), status(), getError());
     }
 }

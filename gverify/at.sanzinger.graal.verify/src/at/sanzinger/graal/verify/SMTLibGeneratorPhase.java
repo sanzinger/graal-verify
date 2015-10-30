@@ -1,15 +1,16 @@
 package at.sanzinger.graal.verify;
 
+import static com.oracle.graal.debug.TTY.println;
+import static java.lang.String.format;
+
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.List;
 
 import com.oracle.graal.compiler.common.type.PrimitiveStamp;
-import com.oracle.graal.debug.TTY;
 import com.oracle.graal.graph.Node;
 import com.oracle.graal.graph.NodeClass;
 import com.oracle.graal.graph.iterators.NodeIterable;
@@ -42,6 +43,7 @@ import at.sanzinger.boolector.Boolector;
 import at.sanzinger.boolector.BoolectorInstance;
 import at.sanzinger.boolector.SMT;
 import at.sanzinger.boolector.SMT.Check;
+import at.sanzinger.boolector.SMTResult;
 import at.sanzinger.graal.verify.gen.OperatorDescription;
 import jdk.vm.ci.meta.PrimitiveConstant;
 import jdk.vm.ci.options.Option;
@@ -215,7 +217,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         String prologue = "(set-logic QF_BV)";
         StringBuilder declarations = new StringBuilder();
         StringBuilder definitions = new StringBuilder();
-        List<Node> definedNodes = new ArrayList<>();
+        List<ValueNode> definedNodes = new ArrayList<>();
         for (Node n : graph.getNodes()) {
             if (n instanceof ValueNode) {
                 @SuppressWarnings("unchecked")
@@ -223,45 +225,60 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
                 if (d != null) {
                     appendCrNonNull(declarations, d.getDeclaration().apply((ValueNode) n));
                     appendCrNonNull(definitions, d.getDefinition().apply((ValueNode) n));
-                    definedNodes.add(n);
+                    definedNodes.add((ValueNode) n);
                 }
             }
         }
         SMT smt = new SMT(prologue + declarations + definitions);
         check(smt, definedNodes);
-        if(!DumpSMTDir.hasDefaultValue()) {
+        if (!DumpSMTDir.hasDefaultValue()) {
             dumpSMT(graph, prologue, declarations, definitions);
         }
     }
 
-    private void dumpSMT(StructuredGraph graph, String prologue, StringBuilder declarations, StringBuilder definitions) {
+    private static void dumpSMT(StructuredGraph graph, String prologue, StringBuilder declarations, StringBuilder definitions) {
         String filename = graph.method().format("%h_%n_(%p).smt2").replace(' ', '_');
         File outfile = new File(DumpSMTDir.getValue(), filename);
         try {
-            TTY.println("Write SMT model of %s to file %s", graph.method(), outfile);
+            println("Write SMT model of %s to file %s", graph.method(), outfile);
             writeToFile(outfile, prologue, declarations, definitions);
         } catch (IOException e) {
-            TTY.println("Cannot write file to %s %s", outfile, e);
+            println("Cannot write file to %s %s", outfile, e);
         }
     }
 
-    private static void check(SMT smt, List<Node> definedNodes) {
+    private static void check(SMT smt, List<ValueNode> definedNodes) {
         if (!Btor.hasDefaultValue()) {
             addEqualityChecks(smt, definedNodes);
-            Boolector btor = new Boolector(Btor.getDefaultValue());
+            Boolector btor = new Boolector(Btor.getValue());
             try (BoolectorInstance i = btor.newInstance()) {
-                System.out.println(Arrays.toString(i.execute(smt)));
+                for (SMTResult result : i.execute(smt)) {
+                    if (result.isError()) {
+                        println("Error on checking %s: %s", result.getCheck(), result.getError());
+                    }
+                    if (!result.isSat()) {
+                        println("unsat: %s", result.getCheck().getName());
+                    }
+                }
             }
         }
     }
 
-    private static void addEqualityChecks(SMT smt, List<Node> definedNodes) {
+    private static void addEqualityChecks(SMT smt, List<ValueNode> definedNodes) {
         int sz = definedNodes.size();
         for (int i = 0; i < sz; i++) {
-            String n1 = getNodeString(definedNodes.get(i));
-            for (int j = 0; j < sz; j++) {
-                String n2 = getNodeString(definedNodes.get(j));
-                smt.addCheck(new Check("(assert (not (=" + n1 + " " + n2 + ")))"));
+            ValueNode ni = definedNodes.get(i);
+            String nni = getNodeString(ni);
+            for (int j = i + 1; j < sz; j++) {
+                if (i == j) {
+                    continue;
+                }
+                ValueNode nj = definedNodes.get(j);
+                String nnj = getNodeString(nj);
+                if (ni.stamp().equals(nj.stamp())) {
+                    String name = format("%s == %s", ni, nj);
+                    smt.addCheck(new Check(name, "(assert (not (= " + nni + " " + nnj + ")))"));
+                }
             }
         }
     }

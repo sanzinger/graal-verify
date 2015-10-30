@@ -28,19 +28,25 @@ public class SMT {
 
     public static class Check {
         private final String check;
+        private final String name;
 
-        public Check(String check) {
+        public Check(String name, String check) {
             super();
             this.check = check;
+            this.name = name;
         }
 
         public String getCheck() {
             return check;
         }
 
+        public String getName() {
+            return name;
+        }
+
         @Override
         public String toString() {
-            return check.trim();
+            return name + " " + check.trim();
         }
     }
 }

@@ -70,7 +70,12 @@ public class BoolectorInstance implements AutoCloseable {
                 out.println(c.getCheck());
                 out.println("(check-sat)");
                 out.flush();
-                List<String> lines = waitForOutputLine(1000, "sat", "unsat");
+                List<String> lines;
+                long waitUntil = System.currentTimeMillis() + 5000;
+                do {
+                    lines = waitForOutputLine(200, "sat", "unsat");
+                } while (lines == null && waitUntil < System.currentTimeMillis() && errIs.available() == 0);
+
                 StringBuilder err = new StringBuilder();
                 while (errIs.available() > 0) {
                     err.append(lineSeparator());
@@ -78,6 +83,9 @@ public class BoolectorInstance implements AutoCloseable {
                 }
                 out.println("(pop 1)");
                 out.flush();
+                if (err.length() == 0 && lines == null) {
+                    System.out.println("ERROR");
+                }
                 results[i] = new SMTResult(c, lines, err.length() > 0 ? err.substring(lineSeparator().length()) : null);
                 i++;
             }
