@@ -29,6 +29,8 @@ import com.oracle.graal.nodes.ValuePhiNode;
 import com.oracle.graal.nodes.calc.AddNode;
 import com.oracle.graal.nodes.calc.AndNode;
 import com.oracle.graal.nodes.calc.DivNode;
+import com.oracle.graal.nodes.calc.FloatEqualsNode;
+import com.oracle.graal.nodes.calc.FloatLessThanNode;
 import com.oracle.graal.nodes.calc.IntegerDivNode;
 import com.oracle.graal.nodes.calc.IntegerEqualsNode;
 import com.oracle.graal.nodes.calc.IntegerLessThanNode;
@@ -92,6 +94,8 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         n2o(InvokeNode.TYPE, null);
         n2o(IntegerLessThanNode.TYPE, "bvslt");
         n2o(IntegerEqualsNode.TYPE, "=");
+        n2o(FloatEqualsNode.TYPE, null);
+        n2o(FloatLessThanNode.TYPE, null);
         n2o(IntegerRemNode.TYPE, "bvurem");
         n2o(IntegerDivNode.TYPE, "bvsdiv");
         n2o(UnsignedRightShiftNode.TYPE, "bvlshr");
@@ -109,6 +113,9 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         }
         StringBuilder sb = new StringBuilder();
         if (n.inputs().count() > 0) {
+            if (!allCaptured(n.inputs())) {
+                return null;
+            }
             sb.append("(assert (= ");
             sb.append(getNodeString(n));
             sb.append(" (");
@@ -125,6 +132,9 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     private static String ifDefinition(IfNode n) {
         IfSuccessorPair ifSucc = findDominatingIfNode(n.predecessor());
         ValueNode condition = n.condition();
+        if (!isCaptured(condition)) {
+            return null;
+        }
         String conditionString = getNodeString(condition);
         StringBuilder sb = new StringBuilder();
 
@@ -152,28 +162,32 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         } else if (merge instanceof LoopBeginNode) {
             return null;
         }
-        for (Node en : pred) {
-            IfSuccessorPair ifNodeSucc = findDominatingIfNode(en);
-            ValueNode ifNode = ifNodeSucc.ifNode.condition();
-            sb.append("(");
-            if (i + 1 < count) {
-                sb.append("ite ");
+        if (allCaptured(pred)) {
+            for (Node en : pred) {
+                IfSuccessorPair ifNodeSucc = findDominatingIfNode(en);
+                ValueNode ifNode = ifNodeSucc.ifNode.condition();
                 sb.append("(");
-                if (!ifNodeSucc.trueSuccessor) {
-                    sb.append("not ");
+                if (i + 1 < count) {
+                    sb.append("ite ");
+                    sb.append("(");
+                    if (!ifNodeSucc.trueSuccessor) {
+                        sb.append("not ");
+                    }
+                    sb.append(getNodeString(ifNode));
+                    sb.append(") ");
                 }
-                sb.append(getNodeString(ifNode));
-                sb.append(") ");
+                sb.append(' ');
+                sb.append(getNodeString(n.valueAt(i)));
+                sb.append(' ');
+                closing.append(")");
+                i++;
             }
-            sb.append(' ');
-            sb.append(getNodeString(n.valueAt(i)));
-            sb.append(' ');
-            closing.append(")");
-            i++;
+            sb.append(closing);
+            sb.append("))");
+            return sb.toString();
+        } else {
+            return null;
         }
-        sb.append(closing);
-        sb.append("))");
-        return sb.toString();
     }
 
     private static IfSuccessorPair findDominatingIfNode(Node fn) {
@@ -261,6 +275,19 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         if (!DumpSMTDir.hasDefaultValue()) {
             dumpSMT(graph, prologue, declarations, definitions);
         }
+    }
+
+    private static boolean allCaptured(Iterable<? extends Node> nodes) {
+        for (Node n : nodes) {
+            if (!isCaptured(n)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isCaptured(Node n) {
+        return n2o.containsKey(n.getNodeClass());
     }
 
     private static void dumpSMT(StructuredGraph graph, String prologue, StringBuilder declarations, StringBuilder definitions) {
