@@ -51,6 +51,9 @@ import at.sanzinger.boolector.SMT;
 import at.sanzinger.boolector.SMT.Check;
 import at.sanzinger.boolector.SMTResult;
 import at.sanzinger.graal.verify.gen.OperatorDescription;
+import jdk.vm.ci.common.JVMCIError;
+import jdk.vm.ci.meta.Constant;
+import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.PrimitiveConstant;
 import jdk.vm.ci.options.Option;
 import jdk.vm.ci.options.OptionType;
@@ -215,9 +218,25 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     }
 
     private static String defineConstant(ConstantNode n) {
-        PrimitiveConstant c = (PrimitiveConstant) n.asConstant();
-        int bits = c.getJavaKind().getBitCount();
-        return String.format("(assert (= %s #x%0" + (bits / 4) + "x))", getNodeString(n), c.asBoxedPrimitive());
+        Constant c = n.asConstant();
+        int bitLength = 0;
+        long bits = 0;
+        if (c instanceof PrimitiveConstant) {
+            JavaKind jk = ((PrimitiveConstant) c).getJavaKind();
+            bitLength = ((PrimitiveConstant) c).getJavaKind().getBitCount();
+            if (jk.isNumericInteger()) {
+                bits = ((PrimitiveConstant) c).asLong();
+            } else if (jk.isNumericFloat()) {
+                bits = Double.doubleToRawLongBits(((PrimitiveConstant) c).asDouble());
+            } else {
+                throw JVMCIError.shouldNotReachHere("Unknown PrimitiveConstant");
+            }
+        }
+        if (bitLength > 0) {
+            return String.format("(assert (= %s #x%0" + (bitLength / 4) + "x))", getNodeString(n), bits);
+        } else {
+            return null;
+        }
     }
 
     @Override
