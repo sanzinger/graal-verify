@@ -129,7 +129,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         StringBuilder sb = new StringBuilder();
 
         if (ifSucc != null) {
-            sb.append(String.format("\n(assert (= %s (%s %s)))", conditionString, ifSucc.trueSuccessor ? "" : "not", getNodeString(ifSucc.ifNode)));
+            sb.append(String.format("\n(assert (= %s (%s %s)))", conditionString, ifSucc.trueSuccessor ? "" : "not", getNodeString(ifSucc.ifNode.condition())));
         }
         return sb.toString();
     }
