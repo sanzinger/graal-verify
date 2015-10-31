@@ -109,16 +109,12 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
 
     private static String ifDefinition(IfNode n) {
         IfSuccessorPair ifSucc = findDominatingIfNode(n.predecessor());
-        String nodeString = getNodeString(n);
+        ValueNode condition = n.condition();
+        String conditionString = getNodeString(condition);
         StringBuilder sb = new StringBuilder();
-        sb.append("(assert (= ");
-        sb.append(nodeString);
-        sb.append(' ');
-        sb.append(getNodeString(n.condition()));
-        sb.append("))");
 
         if (ifSucc != null) {
-            sb.append(String.format("\n(assert (= %s (%s %s)))", nodeString, ifSucc.trueSuccessor ? "" : "not", getNodeString(ifSucc.ifNode)));
+            sb.append(String.format("\n(assert (= %s (%s %s)))", conditionString, ifSucc.trueSuccessor ? "" : "not", getNodeString(ifSucc.ifNode)));
         }
         return sb.toString();
     }
@@ -143,7 +139,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         }
         for (Node en : pred) {
             IfSuccessorPair ifNodeSucc = findDominatingIfNode(en);
-            IfNode ifNode = ifNodeSucc.ifNode;
+            ValueNode ifNode = ifNodeSucc.ifNode.condition();
             sb.append("(");
             if (i + 1 < count) {
                 sb.append("ite ");
