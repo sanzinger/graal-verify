@@ -94,4 +94,31 @@ public class IntExamples extends VerificationTest {
         compile("countingLoopSnippet");
     }
 
+    public static int fibSnippet(int n) {
+        if (n <= 1) {
+            return n;
+        } else {
+            return fibSnippet(n - 1) + fibSnippet(n - 2);
+        }
+    }
+
+    @Test
+    public void fib() {
+        compile("fibSnippet");
+    }
+
+    public static int ulamSnippet(int an) {
+        int n = an;
+        if (n % 2 == 0) {
+            n = n / 2;
+        } else {
+            n = 3 * n + 1;
+        }
+        return n;
+    }
+
+    @Test
+    public void ulam() {
+        compile("ulamSnippet");
+    }
 }
