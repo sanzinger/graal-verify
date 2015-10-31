@@ -17,6 +17,7 @@ import com.oracle.graal.graph.iterators.NodeIterable;
 import com.oracle.graal.nodes.AbstractMergeNode;
 import com.oracle.graal.nodes.ConstantNode;
 import com.oracle.graal.nodes.IfNode;
+import com.oracle.graal.nodes.InvokeNode;
 import com.oracle.graal.nodes.LogicNode;
 import com.oracle.graal.nodes.LoopBeginNode;
 import com.oracle.graal.nodes.MergeNode;
@@ -80,6 +81,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         n2o(DivNode.TYPE, "bvsdiv");
         n2o(RemNode.TYPE, "bvsrem");
         n2o(ParameterNode.TYPE, null);
+        n2o(InvokeNode.TYPE, null);
         n2o(IntegerLessThanNode.TYPE, "bvslt");
         n2o(IntegerEqualsNode.TYPE, "=");
         n2o(new OperatorDescription<>(IfNode.TYPE, SMTLibGeneratorPhase::booleanDeclaration, SMTLibGeneratorPhase::ifDefinition));
