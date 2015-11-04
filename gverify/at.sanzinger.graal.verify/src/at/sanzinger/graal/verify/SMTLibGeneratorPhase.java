@@ -305,13 +305,16 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         if (!Btor.hasDefaultValue()) {
             addEqualityChecks(smt, definedNodes);
             Boolector btor = new Boolector(Btor.getValue());
-            try (BoolectorInstance i = btor.newInstance()) {
-                for (SMTResult result : i.execute(smt)) {
+            try (BoolectorInstance bi = btor.newInstance()) {
+                SMTResult[] results = bi.execute(smt);
+                for (int i = 0; i < results.length; i++) {
+                    SMTResult result = results[i];
+                    Check check = smt.getChecks().get(i);
                     if (result.isError()) {
-                        println("Error on checking %s: %s", result.getCheck(), result.getError());
+                        println("Error on checking %s: %s", check, result.getError());
                     }
                     if (!result.isSat()) {
-                        println("unsat: %s", result.getCheck().getName());
+                        println("unsat: %s", check.getName());
                     }
                 }
             }
