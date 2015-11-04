@@ -247,7 +247,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             }
         }
         if (bitLength > 0) {
-            return String.format("(assert (= %s #x%0" + (bitLength / 4) + "x))", getNodeString(n), bits);
+            return String.format("(assert (= %s #x%0" + (bitLength / 4) + "x))", getNodeString(n), bits & ((1l << bitLength) - 1));
         } else {
             return null;
         }

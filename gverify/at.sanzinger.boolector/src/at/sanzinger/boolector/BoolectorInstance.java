@@ -230,7 +230,6 @@ public class BoolectorInstance implements AutoCloseable {
             }
             pop();
             closed = true;
-
         }
     }
 }
