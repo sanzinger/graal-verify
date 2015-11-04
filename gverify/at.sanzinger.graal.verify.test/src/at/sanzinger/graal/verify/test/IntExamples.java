@@ -1,5 +1,6 @@
 package at.sanzinger.graal.verify.test;
 
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class IntExamples extends VerificationTest {
@@ -166,8 +167,9 @@ public class IntExamples extends VerificationTest {
         return score;
     }
 
-// @Test
-// public void sieve() {
-// compile("sieveSnippet");
-// }
+    @Test
+    @Ignore
+    public void sieve() {
+        compile("sieveSnippet");
+    }
 }
