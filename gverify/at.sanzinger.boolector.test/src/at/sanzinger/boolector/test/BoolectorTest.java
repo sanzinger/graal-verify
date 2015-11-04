@@ -2,7 +2,11 @@ package at.sanzinger.boolector.test;
 
 import static java.lang.System.currentTimeMillis;
 import static java.lang.System.lineSeparator;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.io.IOException;
@@ -15,9 +19,11 @@ import org.junit.Test;
 
 import at.sanzinger.boolector.Boolector;
 import at.sanzinger.boolector.BoolectorInstance;
-import at.sanzinger.boolector.SMT;
 import at.sanzinger.boolector.BoolectorInstance.FrameHandle;
+import at.sanzinger.boolector.SMT;
 import at.sanzinger.boolector.SMT.Check;
+import at.sanzinger.boolector.SMTModel;
+import at.sanzinger.boolector.SMTModel.Definition;
 import at.sanzinger.boolector.SMTResult;
 
 public class BoolectorTest {
@@ -108,6 +114,18 @@ public class BoolectorTest {
                 SMTResult r = i.execute(s)[0];
                 assertEquals("sat", r.status());
             }
+        }
+    }
+
+    @Test
+    public void testModel() {
+        try (BoolectorInstance i = btor.newInstance()) {
+            i.define("(set-logic QF_BV)\n(declare-fun n1 () Bool)\n(assert (= n1 #b1))");
+            SMTModel m = i.getModel();
+            Definition[] d = m.getDefinitions();
+            assertEquals(1, d.length);
+            assertEquals("n1", d[0].getName());
+            assertEquals("#b1", d[0].getValue());
         }
     }
 

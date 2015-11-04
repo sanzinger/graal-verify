@@ -64,38 +64,67 @@ public class BoolectorInstance implements AutoCloseable {
         out.flush();
         SMTResult[] results = new SMTResult[smt.getChecks().size()];
         int i = 0;
-        try {
-            for (Check c : smt.getChecks()) {
-                try (FrameHandle h = push()) {
-                    out.println(c.getCheck());
-                    out.println("(check-sat)");
-                    out.flush();
-                    List<String> lines;
-                    long waitUntil = System.currentTimeMillis() + 5000;
-                    do {
-                        lines = waitForOutputLine(200, "sat", "unsat");
-                    } while (lines == null && waitUntil < System.currentTimeMillis() && errIs.available() == 0);
-                    String error = getErrorLines();
-                    results[i] = new SMTResult(c, lines, error);
-                    i++;
-                }
+        for (Check c : smt.getChecks()) {
+            try (FrameHandle h = push()) {
+                String check = c.getCheck();
+                SMTResult result = checkSat(check);
+                results[i] = result;
+                i++;
             }
-        } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
-            close();
-            return null;
         }
         return results;
     }
 
-    private String getErrorLines() {
+    public void define(String check) {
+        ensureOpen();
+        out.println(check);
+        out.flush();
+    }
+
+    public SMTModel getModel() {
+        out.println("(check-sat)\n(get-model)");
+        out.flush();
+        try {
+            List<String> lines = waitForOutputLine(1000, ")", "unsat");
+            if (lines.get(0).equals("unsat")) {
+                return null;
+            } else {
+                return new SMTModel(lines.subList(1, lines.size()));
+            }
+        } catch (InterruptedException e) {
+            return null;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public SMTResult checkSat(String check) {
+        define(check);
+        out.println("(check-sat)");
+        out.flush();
+        List<String> lines;
+        long waitUntil = System.currentTimeMillis() + 5000;
+        try {
+            do {
+                lines = waitForOutputLine(200, "sat", "unsat");
+            } while (lines == null && waitUntil < System.currentTimeMillis() && errIs.available() == 0);
+            String error = getPendingLines(errIs);
+            SMTResult result = new SMTResult(lines, error);
+            return result;
+        } catch (InterruptedException e) {
+            return null;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static String getPendingLines(InputStream is) {
         try {
             StringBuilder err = new StringBuilder();
-            while (errIs.available() > 0) {
-                err.append(lineSeparator());
-                err.append(readLineWithTimeout(errIs, 1));
+            while (is.available() > 0) {
+                err.append(readLineWithTimeout(is, 1));
             }
-            return err.length() > 0 ? err.substring(lineSeparator().length()) : null;
+            return err.length() > 0 ? err.toString() : null;
         } catch (InterruptedException e) {
             return null;
         } catch (IOException e) {
@@ -112,7 +141,7 @@ public class BoolectorInstance implements AutoCloseable {
         ensureOpen();
         out.println("(push 1)");
         out.flush();
-        String error = getErrorLines();
+        String error = getPendingLines(errIs);
         if (error != null) {
             throw new RuntimeException(error);
         }
@@ -136,7 +165,7 @@ public class BoolectorInstance implements AutoCloseable {
             if (lineend != -1) {
                 is.reset();
                 is.skip(lineend + 1);
-                return line;
+                return line.substring(0, lineend + lineSeparator().length());
             }
             offset += read;
             if (avail == 0) {
