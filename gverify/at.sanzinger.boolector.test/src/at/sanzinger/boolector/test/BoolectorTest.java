@@ -16,6 +16,7 @@ import org.junit.Test;
 import at.sanzinger.boolector.Boolector;
 import at.sanzinger.boolector.BoolectorInstance;
 import at.sanzinger.boolector.SMT;
+import at.sanzinger.boolector.BoolectorInstance.FrameHandle;
 import at.sanzinger.boolector.SMT.Check;
 import at.sanzinger.boolector.SMTResult;
 
@@ -89,6 +90,24 @@ public class BoolectorTest {
             s.addCheck(new Check("test", ""));
             SMTResult[] r = i.execute(s);
             assertEquals("boolector: <stdin>:1:12: expected logic at 'UNKNOWN'" + lineSeparator(), r[0].getError());
+        }
+    }
+
+    @Test
+    public void testNestedPush() {
+        try (BoolectorInstance i = btor.newInstance()) {
+            try (FrameHandle h = i.push()) {
+                SMT s = new SMT("(set-logic QF_BV)\n(declare-fun n () Bool)");
+                s.addCheck(new Check("satisfyable", "(assert (= n #b1))\n(assert (= n #b0))"));
+                SMTResult r = i.execute(s)[0];
+                assertEquals("unsat", r.status());
+            }
+            try (FrameHandle h = i.push()) {
+                SMT s = new SMT("(set-logic QF_BV)\n(declare-fun n () Bool)");
+                s.addCheck(new Check("satisfyable", "(assert (= n #b1))"));
+                SMTResult r = i.execute(s)[0];
+                assertEquals("sat", r.status());
+            }
         }
     }
 

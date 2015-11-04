@@ -66,28 +66,19 @@ public class BoolectorInstance implements AutoCloseable {
         int i = 0;
         try {
             for (Check c : smt.getChecks()) {
-                out.println("(push 1)");
-                out.println(c.getCheck());
-                out.println("(check-sat)");
-                out.flush();
-                List<String> lines;
-                long waitUntil = System.currentTimeMillis() + 5000;
-                do {
-                    lines = waitForOutputLine(200, "sat", "unsat");
-                } while (lines == null && waitUntil < System.currentTimeMillis() && errIs.available() == 0);
-
-                StringBuilder err = new StringBuilder();
-                while (errIs.available() > 0) {
-                    err.append(lineSeparator());
-                    err.append(readLineWithTimeout(errIs, 1));
+                try (FrameHandle h = push()) {
+                    out.println(c.getCheck());
+                    out.println("(check-sat)");
+                    out.flush();
+                    List<String> lines;
+                    long waitUntil = System.currentTimeMillis() + 5000;
+                    do {
+                        lines = waitForOutputLine(200, "sat", "unsat");
+                    } while (lines == null && waitUntil < System.currentTimeMillis() && errIs.available() == 0);
+                    String error = getErrorLines();
+                    results[i] = new SMTResult(c, lines, error);
+                    i++;
                 }
-                out.println("(pop 1)");
-                out.flush();
-                if (err.length() == 0 && lines == null) {
-                    System.out.println("ERROR");
-                }
-                results[i] = new SMTResult(c, lines, err.length() > 0 ? err.substring(lineSeparator().length()) : null);
-                i++;
             }
         } catch (IOException | InterruptedException e) {
             e.printStackTrace();
@@ -95,6 +86,37 @@ public class BoolectorInstance implements AutoCloseable {
             return null;
         }
         return results;
+    }
+
+    private String getErrorLines() {
+        try {
+            StringBuilder err = new StringBuilder();
+            while (errIs.available() > 0) {
+                err.append(lineSeparator());
+                err.append(readLineWithTimeout(errIs, 1));
+            }
+            return err.length() > 0 ? err.substring(lineSeparator().length()) : null;
+        } catch (InterruptedException e) {
+            return null;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void pop() {
+        out.println("(pop 1)");
+        out.flush();
+    }
+
+    public FrameHandle push() {
+        ensureOpen();
+        out.println("(push 1)");
+        out.flush();
+        String error = getErrorLines();
+        if (error != null) {
+            throw new RuntimeException(error);
+        }
+        return new FrameHandle();
     }
 
     private static String readLineWithTimeout(InputStream is, int timeout) throws IOException, InterruptedException {
@@ -168,5 +190,18 @@ public class BoolectorInstance implements AutoCloseable {
 
     public boolean isRunning() {
         return p != null && p.isAlive();
+    }
+
+    public class FrameHandle implements AutoCloseable {
+        private boolean closed = false;
+
+        public void close() {
+            if (closed) {
+                throw new RuntimeException("Handle is already closed");
+            }
+            pop();
+            closed = true;
+
+        }
     }
 }
