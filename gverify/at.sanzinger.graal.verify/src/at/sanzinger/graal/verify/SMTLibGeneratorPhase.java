@@ -11,7 +11,24 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.function.Function;
 
+import jdk.vm.ci.common.JVMCIError;
+import jdk.vm.ci.meta.Constant;
+import jdk.vm.ci.meta.JavaKind;
+import jdk.vm.ci.meta.PrimitiveConstant;
+import jdk.vm.ci.options.Option;
+import jdk.vm.ci.options.OptionType;
+import jdk.vm.ci.options.OptionValue;
+import at.sanzinger.boolector.Boolector;
+import at.sanzinger.boolector.BoolectorInstance;
+import at.sanzinger.boolector.SMT;
+import at.sanzinger.boolector.SMT.Check;
+import at.sanzinger.boolector.SMTResult;
+import at.sanzinger.graal.verify.gen.OperatorDescription;
+
+import com.oracle.graal.compiler.common.type.AbstractPointerStamp;
+import com.oracle.graal.compiler.common.type.ObjectStamp;
 import com.oracle.graal.compiler.common.type.PrimitiveStamp;
+import com.oracle.graal.compiler.common.type.Stamp;
 import com.oracle.graal.graph.Node;
 import com.oracle.graal.graph.NodeClass;
 import com.oracle.graal.graph.iterators.NodeIterable;
@@ -30,8 +47,6 @@ import com.oracle.graal.nodes.ValuePhiNode;
 import com.oracle.graal.nodes.calc.AddNode;
 import com.oracle.graal.nodes.calc.AndNode;
 import com.oracle.graal.nodes.calc.DivNode;
-import com.oracle.graal.nodes.calc.FloatEqualsNode;
-import com.oracle.graal.nodes.calc.FloatLessThanNode;
 import com.oracle.graal.nodes.calc.IntegerDivNode;
 import com.oracle.graal.nodes.calc.IntegerEqualsNode;
 import com.oracle.graal.nodes.calc.IntegerLessThanNode;
@@ -47,20 +62,6 @@ import com.oracle.graal.nodes.calc.SubNode;
 import com.oracle.graal.nodes.calc.UnsignedRightShiftNode;
 import com.oracle.graal.phases.BasePhase;
 import com.oracle.graal.phases.tiers.LowTierContext;
-
-import at.sanzinger.boolector.Boolector;
-import at.sanzinger.boolector.BoolectorInstance;
-import at.sanzinger.boolector.SMT;
-import at.sanzinger.boolector.SMT.Check;
-import at.sanzinger.boolector.SMTResult;
-import at.sanzinger.graal.verify.gen.OperatorDescription;
-import jdk.vm.ci.common.JVMCIError;
-import jdk.vm.ci.meta.Constant;
-import jdk.vm.ci.meta.JavaKind;
-import jdk.vm.ci.meta.PrimitiveConstant;
-import jdk.vm.ci.options.Option;
-import jdk.vm.ci.options.OptionType;
-import jdk.vm.ci.options.OptionValue;
 
 public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     private static final IdentityHashMap<NodeClass<? extends ValueNode>, OperatorDescription<?>> n2o = new IdentityHashMap<>();
@@ -95,8 +96,6 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         n2o(InvokeNode.TYPE, null);
         n2o(IntegerLessThanNode.TYPE, "bvslt");
         n2o(IntegerEqualsNode.TYPE, "=");
-        n2o(FloatEqualsNode.TYPE, null);
-        n2o(FloatLessThanNode.TYPE, null);
         n2o(IntegerRemNode.TYPE, "bvurem");
         n2o(IntegerDivNode.TYPE, "bvsdiv");
         n2o(UnsignedRightShiftNode.TYPE, "bvlshr");
@@ -223,11 +222,16 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
 
     private static String defaultDeclaration(ValueNode n) {
         String type;
+        Stamp stamp = n.stamp();
         if (n instanceof LogicNode) {
             type = "Bool";
-        } else {
+        } else if (stamp instanceof PrimitiveStamp) {
             PrimitiveStamp ps = (PrimitiveStamp) n.stamp();
             type = String.format("(_ BitVec %d)", ps.getBits());
+        } else if (stamp instanceof ObjectStamp || stamp instanceof AbstractPointerStamp) {
+            type = String.format("(_ BitVec %d)", 64);
+        } else {
+            throw JVMCIError.unimplemented(n.toString() + " " + n.stamp());
         }
         return String.format("(declare-fun %s () %s)", getNodeString(n), type);
     }
