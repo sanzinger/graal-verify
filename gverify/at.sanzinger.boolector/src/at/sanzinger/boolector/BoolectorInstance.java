@@ -28,7 +28,7 @@ public class BoolectorInstance implements AutoCloseable {
             return;
         }
         boolector.verify();
-        String[] args = {boolector.getBtorBinary().getAbsolutePath(), "-m", "-i"};
+        String[] args = {boolector.getBtorBinary().getAbsolutePath(), "-m", "-i", "-smt2"};
         try {
             p = Runtime.getRuntime().exec(args);
             is = p.getInputStream();
