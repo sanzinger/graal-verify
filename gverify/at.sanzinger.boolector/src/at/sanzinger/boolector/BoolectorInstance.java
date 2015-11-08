@@ -24,6 +24,9 @@ public class BoolectorInstance implements AutoCloseable {
 
     private void ensureOpen() {
         if (opened) {
+            if (!p.isAlive()) {
+                throw new RuntimeException("Process died: " + getPendingLines(errIs) + " " + getPendingLines(is));
+            }
             return;
         }
         boolector.verify();
@@ -112,7 +115,7 @@ public class BoolectorInstance implements AutoCloseable {
         try {
             StringBuilder err = new StringBuilder();
             while (is.available() > 0) {
-                err.append(readLineWithTimeout(is, 1));
+                err.append(readLineWithTimeout(is, 2));
             }
             return err.length() > 0 ? err.toString() : null;
         } catch (InterruptedException e) {
