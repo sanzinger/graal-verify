@@ -1,6 +1,5 @@
 package at.sanzinger.graal.verify.test;
 
-import org.junit.Ignore;
 import org.junit.Test;
 
 public class IntExamples extends VerificationTest {
@@ -135,6 +134,7 @@ public class IntExamples extends VerificationTest {
     /**
      * @author http://rsb.info.nih.gov/nih-image/java/benchmarks/Sieve.java
      */
+    @SuppressWarnings("unused")
     private static int sieveSnippet() {
         int SIZE = 8190;
         boolean flags[] = new boolean[SIZE + 1];
@@ -168,7 +168,6 @@ public class IntExamples extends VerificationTest {
     }
 
     @Test
-    @Ignore
     public void sieve() {
         compile("sieveSnippet");
     }

@@ -105,7 +105,8 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         n2o(UnsignedRightShiftNode.TYPE, "bvlshr");
         n2o(LeftShiftNode.TYPE, "bvshl");
         n2o(RightShiftNode.TYPE, "bvashr");
-        n2o(new OperatorDescription<>(IfNode.TYPE, SMTLibGeneratorPhase::booleanDeclaration, SMTLibGeneratorPhase::ifDefinition));
+        // n2o(new OperatorDescription<>(IfNode.TYPE, SMTLibGeneratorPhase::booleanDeclaration,
+// SMTLibGeneratorPhase::ifDefinition));
         n2o(new OperatorDescription<>(PhiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::phiDefinition));
         n2o(new OperatorDescription<>(ValuePhiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::phiDefinition));
         n2o(new OperatorDescription<>(ConstantNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::defineConstant));
@@ -139,21 +140,6 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         return sb.toString();
     }
 
-    private static String ifDefinition(IfNode n) {
-        IfSuccessorPair ifSucc = findDominatingIfNode(n.predecessor());
-        ValueNode condition = n.condition();
-        if (!isCaptured(condition)) {
-            return null;
-        }
-        String conditionString = getNodeString(condition);
-        StringBuilder sb = new StringBuilder();
-
-        if (ifSucc != null) {
-            sb.append(String.format("\n(assert (= %s (%s %s)))", conditionString, ifSucc.trueSuccessor ? "" : "not", getNodeString(ifSucc.ifNode.condition())));
-        }
-        return sb.toString();
-    }
-
     private static String phiDefinition(PhiNode n) {
         StringBuilder sb = new StringBuilder();
         StringBuilder closing = new StringBuilder();
@@ -172,6 +158,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         } else if (merge instanceof LoopBeginNode) {
             return null;
         }
+        assert count >= 2 : "Count: " + count + " n: " + n;
         if (allCaptured(pred)) {
             for (Node en : pred) {
                 IfSuccessorPair ifNodeSucc = findDominatingIfNode(en);
@@ -226,10 +213,6 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
 
     }
 
-    private static String booleanDeclaration(ValueNode n) {
-        return String.format("(declare-fun %s () Bool)", getNodeString(n));
-    }
-
     private static String defaultDeclaration(ValueNode n) {
         return declaration(n, getBits(n));
     }
@@ -274,7 +257,8 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             }
         }
         if (bitLength > 0) {
-            return String.format("(assert (= %s #x%0" + (bitLength / 4) + "x))", getNodeString(n), bits & ((1l << bitLength) - 1));
+            long value = bitLength < 64 ? bits & ((1l << bitLength) - 1) : bits;
+            return String.format("(assert (= %s #x%0" + (bitLength / 4) + "x))", getNodeString(n), value);
         } else {
             return null;
         }
