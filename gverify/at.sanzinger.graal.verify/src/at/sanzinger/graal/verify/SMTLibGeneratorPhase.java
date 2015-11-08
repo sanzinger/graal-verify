@@ -47,10 +47,12 @@ import com.oracle.graal.nodes.ValuePhiNode;
 import com.oracle.graal.nodes.calc.AddNode;
 import com.oracle.graal.nodes.calc.AndNode;
 import com.oracle.graal.nodes.calc.DivNode;
+import com.oracle.graal.nodes.calc.IntegerBelowNode;
 import com.oracle.graal.nodes.calc.IntegerDivNode;
 import com.oracle.graal.nodes.calc.IntegerEqualsNode;
 import com.oracle.graal.nodes.calc.IntegerLessThanNode;
 import com.oracle.graal.nodes.calc.IntegerRemNode;
+import com.oracle.graal.nodes.calc.IntegerTestNode;
 import com.oracle.graal.nodes.calc.LeftShiftNode;
 import com.oracle.graal.nodes.calc.MulNode;
 import com.oracle.graal.nodes.calc.NegateNode;
@@ -95,7 +97,9 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         n2o(ParameterNode.TYPE, null);
         n2o(InvokeNode.TYPE, null);
         n2o(IntegerLessThanNode.TYPE, "bvslt");
+        n2o(IntegerBelowNode.TYPE, "bvult");
         n2o(IntegerEqualsNode.TYPE, "=");
+        n2o(IntegerTestNode.TYPE, "=");
         n2o(IntegerRemNode.TYPE, "bvurem");
         n2o(IntegerDivNode.TYPE, "bvsdiv");
         n2o(UnsignedRightShiftNode.TYPE, "bvlshr");
@@ -116,13 +120,19 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             if (!allCaptured(n.inputs())) {
                 return null;
             }
+            int bits = getBits(n);
             sb.append("(assert (= ");
             sb.append(getNodeString(n));
             sb.append(" (");
             sb.append(opName);
             for (Node i : n.inputs()) {
+                int iBits = getBits((ValueNode) i);
                 sb.append(' ');
-                sb.append(getNodeString(i));
+                if (iBits < bits) {
+                    sb.append(String.format("((_ sign_extend %d) %s)", bits - iBits, getNodeString(i)));
+                } else {
+                    sb.append(getNodeString(i));
+                }
             }
             sb.append(")))");
         }
@@ -221,17 +231,29 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     }
 
     private static String defaultDeclaration(ValueNode n) {
-        String type;
+        return declaration(n, getBits(n));
+    }
+
+    private static int getBits(ValueNode n) {
         Stamp stamp = n.stamp();
         if (n instanceof LogicNode) {
-            type = "Bool";
+            return 1;
         } else if (stamp instanceof PrimitiveStamp) {
             PrimitiveStamp ps = (PrimitiveStamp) n.stamp();
-            type = String.format("(_ BitVec %d)", ps.getBits());
+            return ps.getBits();
         } else if (stamp instanceof ObjectStamp || stamp instanceof AbstractPointerStamp) {
-            type = String.format("(_ BitVec %d)", 64);
+            return 64;
         } else {
             throw JVMCIError.unimplemented(n.toString() + " " + n.stamp());
+        }
+    }
+
+    private static String declaration(ValueNode n, int bits) {
+        String type;
+        if (bits == 1) {
+            type = "Bool";
+        } else {
+            type = String.format("(_ BitVec %d)", bits);
         }
         return String.format("(declare-fun %s () %s)", getNodeString(n), type);
     }
@@ -276,10 +298,10 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             }
         }
         SMT smt = new SMT(prologue + declarations + definitions);
-        check(smt, definedNodes);
         if (!DumpSMTDir.hasDefaultValue()) {
             dumpSMT(graph, prologue, declarations, definitions);
         }
+        check(smt, definedNodes);
     }
 
     private static boolean allCaptured(Iterable<? extends Node> nodes) {
