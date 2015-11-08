@@ -3,8 +3,10 @@ package at.sanzinger.boolector;
 import static java.lang.System.lineSeparator;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,7 +27,9 @@ public class BoolectorInstance implements AutoCloseable {
     private void ensureOpen() {
         if (opened) {
             if (!p.isAlive()) {
-                throw new RuntimeException("Process died: " + getPendingLines(errIs) + " " + getPendingLines(is));
+                String stderrLines = readRemainingLines(errIs);
+                String stdoutLines = readRemainingLines(is);
+                throw new RuntimeException("Process died, stdout: " + stdoutLines + " stderr: " + stderrLines);
             }
             return;
         }
@@ -45,6 +49,21 @@ public class BoolectorInstance implements AutoCloseable {
             is = null;
             out = null;
         }
+    }
+
+    private static String readRemainingLines(InputStream is) {
+        BufferedReader r = new BufferedReader(new InputStreamReader(is));
+        String line;
+        StringBuilder lines = new StringBuilder();
+        try {
+            while ((line = r.readLine()) != null) {
+                lines.append('\n');
+                lines.append(line);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return lines.substring(Math.min(lines.length(), 1));
     }
 
     private static void closeSilent(AutoCloseable... closeables) {
