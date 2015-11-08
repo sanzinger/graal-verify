@@ -94,8 +94,11 @@ public class BoolectorTest {
         try (BoolectorInstance i = btor.newInstance()) {
             SMT s = new SMT("(set-logic UNKNOWN)");
             s.addCheck(new Check("test", ""));
-            SMTResult[] r = i.execute(s);
-            assertEquals("boolector: <stdin>:1:12: expected logic at 'UNKNOWN'" + lineSeparator(), r[0].getError());
+            try {
+                i.execute(s);
+            } catch (Exception e) {
+                assertEquals("boolector: <stdin>:1:12: expected logic at 'UNKNOWN'" + lineSeparator(), e.getMessage());
+            }
         }
     }
 

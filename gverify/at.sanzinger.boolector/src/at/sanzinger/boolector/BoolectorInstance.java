@@ -59,8 +59,7 @@ public class BoolectorInstance implements AutoCloseable {
 
     public SMTResult[] execute(SMT smt) {
         ensureOpen();
-        out.write(smt.getModel());
-        out.flush();
+        printOut(smt.getModel());
         SMTResult[] results = new SMTResult[smt.getChecks().size()];
         int i = 0;
         for (Function<BoolectorInstance, SMTResult> c : smt.getChecks()) {
@@ -71,13 +70,11 @@ public class BoolectorInstance implements AutoCloseable {
 
     public void define(String check) {
         ensureOpen();
-        out.println(check);
-        out.flush();
+        printOut(check);
     }
 
     public SMTModel getModel() {
-        out.println("(check-sat)\n(get-model)");
-        out.flush();
+        printOut("(check-sat)\n(get-model)");
         try {
             List<String> lines = waitForOutputLine(1000, ")", "unsat");
             if (lines.get(0).equals("unsat")) {
@@ -94,14 +91,13 @@ public class BoolectorInstance implements AutoCloseable {
 
     public SMTResult checkSat(String check) {
         define(check);
-        out.println("(check-sat)");
-        out.flush();
+        printOut("(check-sat)");
         List<String> lines;
         long waitUntil = System.currentTimeMillis() + 5000;
         try {
             do {
                 lines = waitForOutputLine(200, "sat", "unsat");
-            } while (lines == null && waitUntil < System.currentTimeMillis() && errIs.available() == 0);
+            } while (lines == null && waitUntil > System.currentTimeMillis() && errIs.available() == 0);
             String error = getPendingLines(errIs);
             SMTResult result = new SMTResult(lines, error);
             return result;
@@ -126,15 +122,19 @@ public class BoolectorInstance implements AutoCloseable {
         }
     }
 
-    public void pop() {
-        out.println("(pop 1)");
+    private void printOut(String line) {
+        System.out.println("Out: " + line.replace("\n", "\\n"));
+        out.println(line);
         out.flush();
+    }
+
+    public void pop() {
+        printOut("(pop 1)");
     }
 
     public FrameHandle push() {
         ensureOpen();
-        out.println("(push 1)");
-        out.flush();
+        printOut("(push 1)");
         String error = getPendingLines(errIs);
         if (error != null) {
             throw new RuntimeException(error);
@@ -195,9 +195,7 @@ public class BoolectorInstance implements AutoCloseable {
         if (!opened) {
             return;
         }
-        out.println();
-        out.println("(exit)");
-        out.flush();
+        printOut("\n(exit)");
         try {
             p.waitFor(1, SECONDS);
         } catch (InterruptedException ie) {
