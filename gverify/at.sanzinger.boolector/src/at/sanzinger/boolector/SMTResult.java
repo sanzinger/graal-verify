@@ -5,6 +5,7 @@ import java.util.List;
 public class SMTResult {
     private final List<String> lines;
     private final String error;
+    private String name;
 
     public SMTResult(List<String> lines, String error) {
         super();
@@ -26,6 +27,14 @@ public class SMTResult {
 
     public boolean isError() {
         return error != null;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getName() {
+        return name;
     }
 
     @Override

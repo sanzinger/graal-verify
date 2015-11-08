@@ -8,8 +8,7 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
-
-import at.sanzinger.boolector.SMT.Check;
+import java.util.function.Function;
 
 public class BoolectorInstance implements AutoCloseable {
     private final Boolector boolector;
@@ -64,13 +63,8 @@ public class BoolectorInstance implements AutoCloseable {
         out.flush();
         SMTResult[] results = new SMTResult[smt.getChecks().size()];
         int i = 0;
-        for (Check c : smt.getChecks()) {
-            try (FrameHandle h = push()) {
-                String check = c.getCheck();
-                SMTResult result = checkSat(check);
-                results[i] = result;
-                i++;
-            }
+        for (Function<BoolectorInstance, SMTResult> c : smt.getChecks()) {
+            results[i++] = c.apply(this);
         }
         return results;
     }

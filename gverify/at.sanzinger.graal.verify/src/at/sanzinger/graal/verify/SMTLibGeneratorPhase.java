@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.function.Function;
 
 import com.oracle.graal.compiler.common.type.PrimitiveStamp;
 import com.oracle.graal.graph.Node;
@@ -309,12 +310,12 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
                 SMTResult[] results = bi.execute(smt);
                 for (int i = 0; i < results.length; i++) {
                     SMTResult result = results[i];
-                    Check check = smt.getChecks().get(i);
+                    Function<BoolectorInstance, SMTResult> check = smt.getChecks().get(i);
                     if (result.isError()) {
                         println("Error on checking %s: %s", check, result.getError());
                     }
                     if (!result.isSat()) {
-                        println("unsat: %s", check.getName());
+                        println("unsat: %s", result.getName());
                     }
                 }
             }
