@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import jdk.vm.ci.common.JVMCIError;
@@ -76,6 +77,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     // @formatter:on
 
     private static Boolector boolector;
+    private static final AtomicInteger unknownCounter = new AtomicInteger();
 
     private static <T extends ValueNode> void n2o(NodeClass<T> nodeClass, String opName) {
         n2o.put(nodeClass, new OperatorDescription<>(nodeClass, (n) -> defaultDeclaration(n), (n) -> defaultDefinition(opName, n)));
@@ -252,7 +254,12 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
                     bits = pc.asLong();
                     break;
                 case Int:
+                case Short:
+                case Byte:
                     bits = pc.asInt();
+                    break;
+                case Char:
+                    bits = pc.asInt() & 0xFFFF;
                     break;
                 case Boolean:
                     bits = pc.asBoolean() ? 1 : 0;
@@ -313,7 +320,12 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     }
 
     private static void dumpSMT(StructuredGraph graph, String prologue, StringBuilder declarations, StringBuilder definitions) {
-        String filename = graph.method().format("%h_%n_(%p).smt2").replace(' ', '_');
+        String filename;
+        if (graph.method() == null) {
+            filename = String.format("%s_%d.smt2", graph.toString(), unknownCounter.incrementAndGet());
+        } else {
+            filename = graph.method().format("%h_%n_(%p).smt2").replace(' ', '_').replace('/', '_');
+        }
         File outfile = new File(DumpSMTDir.getValue(), filename);
         try {
             println("Write SMT model of %s to file %s", graph.method(), outfile);
