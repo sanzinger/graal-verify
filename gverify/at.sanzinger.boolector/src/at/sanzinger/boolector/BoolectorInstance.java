@@ -33,8 +33,7 @@ public class BoolectorInstance implements AutoCloseable {
             }
             return;
         }
-        boolector.verify();
-        String[] args = {boolector.getBtorBinary().getAbsolutePath(), "-m", "-i", "-smt2"};
+        String[] args = {boolector.getBtorCmd(), "-m", "-i", "-smt2"};
         try {
             p = Runtime.getRuntime().exec(args);
             is = p.getInputStream();
@@ -130,7 +129,7 @@ public class BoolectorInstance implements AutoCloseable {
         }
     }
 
-    private static String getPendingLines(InputStream is) {
+    static String getPendingLines(InputStream is) {
         try {
             StringBuilder err = new StringBuilder();
             while (is.available() > 0) {

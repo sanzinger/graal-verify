@@ -76,6 +76,8 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     private static final OptionValue<String> Btor = new OptionValue<>(null);
     // @formatter:on
 
+    private static Boolector boolector;
+
     private static <T extends ValueNode> void n2o(NodeClass<T> nodeClass, String opName) {
         n2o.put(nodeClass, new OperatorDescription<>(nodeClass, (n) -> defaultDeclaration(n), (n) -> defaultDefinition(opName, n)));
     }
@@ -311,20 +313,18 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     }
 
     private static void check(SMT smt, List<ValueNode> definedNodes) {
-        if (!Btor.hasDefaultValue()) {
-            addEqualityChecks(smt, definedNodes);
-            Boolector btor = new Boolector(Btor.getValue());
-            try (BoolectorInstance bi = btor.newInstance()) {
-                SMTResult[] results = bi.execute(smt);
-                for (int i = 0; i < results.length; i++) {
-                    SMTResult result = results[i];
-                    Function<BoolectorInstance, SMTResult> check = smt.getChecks().get(i);
-                    if (result.isError()) {
-                        println("Error on checking %s: %s", check, result.getError());
-                    }
-                    if (!result.isSat()) {
-                        println("unsat: %s", result.getName());
-                    }
+        addEqualityChecks(smt, definedNodes);
+        Boolector btor = getBoolector();
+        try (BoolectorInstance bi = btor.newInstance()) {
+            SMTResult[] results = bi.execute(smt);
+            for (int i = 0; i < results.length; i++) {
+                SMTResult result = results[i];
+                Function<BoolectorInstance, SMTResult> check = smt.getChecks().get(i);
+                if (result.isError()) {
+                    println("Error on checking %s: %s", check, result.getError());
+                }
+                if (!result.isSat()) {
+                    println("unsat: %s", result.getName());
                 }
             }
         }
@@ -371,5 +371,19 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     @SuppressWarnings("deprecation")
     private static String getNodeString(Node n) {
         return "n" + n.getId();
+    }
+
+    private static Boolector getBoolector() {
+        if (boolector == null) {
+            String btorPath;
+            if (!Btor.hasDefaultValue()) {
+                btorPath = Btor.getValue();
+            } else {
+                btorPath = "boolector";
+            }
+            boolector = new Boolector(btorPath); // write race ok
+            boolector.verify();
+        }
+        return boolector;
     }
 }
