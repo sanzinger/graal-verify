@@ -49,10 +49,12 @@ suite = {
       "workingSets" : "Verification",
       "dependencies" : [
 	"graal:GRAAL_COMPILER",
+	"graal:GRAAL_HOTSPOT",
 	"at.sanzinger.boolector",
       ],
       "annotationProcessors" : [
         "jvmci:JVMCI_OPTIONS_PROCESSOR",
+        "jvmci:JVMCI_SERVICE_PROCESSOR",
       ],
     },
 

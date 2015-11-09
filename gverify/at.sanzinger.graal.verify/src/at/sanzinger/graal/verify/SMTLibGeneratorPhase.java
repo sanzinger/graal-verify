@@ -105,8 +105,6 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         n2o(UnsignedRightShiftNode.TYPE, "bvlshr");
         n2o(LeftShiftNode.TYPE, "bvshl");
         n2o(RightShiftNode.TYPE, "bvashr");
-        // n2o(new OperatorDescription<>(IfNode.TYPE, SMTLibGeneratorPhase::booleanDeclaration,
-// SMTLibGeneratorPhase::ifDefinition));
         n2o(new OperatorDescription<>(PhiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::phiDefinition));
         n2o(new OperatorDescription<>(ValuePhiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::phiDefinition));
         n2o(new OperatorDescription<>(ConstantNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::defineConstant));

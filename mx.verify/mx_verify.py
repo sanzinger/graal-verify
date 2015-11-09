@@ -1,3 +1,3 @@
 from mx_jvmci import JvmciJDKDeployedDist, jdkDeployedDists
 
-jdkDeployedDists += [JvmciJDKDeployedDist('GRAAL_VERIFY')]
+jdkDeployedDists += [JvmciJDKDeployedDist('GRAAL_VERIFY', compilers=["graal-verify"])]
