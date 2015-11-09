@@ -13,7 +13,6 @@ import java.util.function.Function;
 
 import jdk.vm.ci.common.JVMCIError;
 import jdk.vm.ci.meta.Constant;
-import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.PrimitiveConstant;
 import jdk.vm.ci.options.Option;
 import jdk.vm.ci.options.OptionType;
@@ -246,14 +245,26 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         int bitLength = 0;
         long bits = 0;
         if (c instanceof PrimitiveConstant) {
-            JavaKind jk = ((PrimitiveConstant) c).getJavaKind();
             bitLength = ((PrimitiveConstant) c).getJavaKind().getBitCount();
-            if (jk.isNumericInteger()) {
-                bits = ((PrimitiveConstant) c).asLong();
-            } else if (jk.isNumericFloat()) {
-                bits = Double.doubleToRawLongBits(((PrimitiveConstant) c).asDouble());
-            } else {
-                throw JVMCIError.shouldNotReachHere("Unknown PrimitiveConstant");
+            PrimitiveConstant pc = (PrimitiveConstant) c;
+            switch (pc.getJavaKind()) {
+                case Long:
+                    bits = pc.asLong();
+                    break;
+                case Int:
+                    bits = pc.asInt();
+                    break;
+                case Boolean:
+                    bits = pc.asBoolean() ? 1 : 0;
+                    break;
+                case Float:
+                    bits = Float.floatToRawIntBits(pc.asFloat());
+                    break;
+                case Double:
+                    bits = Double.doubleToRawLongBits(pc.asDouble());
+                    break;
+                default:
+                    throw JVMCIError.shouldNotReachHere("Unknown PrimitiveConstant " + pc);
             }
         }
         if (bitLength > 0) {
