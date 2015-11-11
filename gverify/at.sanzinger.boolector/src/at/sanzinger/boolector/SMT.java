@@ -21,7 +21,7 @@ public class SMT {
         return model;
     }
 
-    public void addCheck(Check c) {
+    public void addCheck(Function<BoolectorInstance, SMTResult> c) {
         checks.add(c);
     }
 

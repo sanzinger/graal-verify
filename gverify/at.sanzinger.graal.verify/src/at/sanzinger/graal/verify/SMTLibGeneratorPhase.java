@@ -300,6 +300,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             }
         }
         SMT smt = new SMT(prologue + declarations + definitions);
+        smt.addCheck(new ConstantFoldingCheck());
         if (!DumpSMTDir.hasDefaultValue()) {
             dumpSMT(graph, prologue, declarations, definitions);
         }
@@ -392,7 +393,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
      * Translates the given node into a symbolic name for n used in the SMT file.
      */
     @SuppressWarnings("deprecation")
-    private static String getNodeString(Node n) {
+    static String getNodeString(Node n) {
         return "n" + n.getId();
     }
 
