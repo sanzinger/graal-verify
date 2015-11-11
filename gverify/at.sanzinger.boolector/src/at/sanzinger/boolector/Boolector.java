@@ -13,9 +13,9 @@ public class Boolector {
     public void verify() throws IllegalArgumentException {
         String version = getVersion();
         if (version == null) {
-            throw new IllegalArgumentException(String.format("Boolector command did not work %s.", btorCmd));
+            throw new IllegalArgumentException(String.format("Boolector command `%s` did not work.", btorCmd));
         } else {
-            System.out.println(String.format("Found btor version %s at %s", version, btorCmd));
+            System.out.println(String.format("Found boolector version %s with command `%s`", version, btorCmd));
         }
     }
 
