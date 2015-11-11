@@ -8,9 +8,14 @@ public class SMTResult {
     private String name;
 
     public SMTResult(List<String> lines, String error) {
+        this(lines, error, null);
+    }
+
+    public SMTResult(List<String> lines, String error, String name) {
         super();
         this.lines = lines;
         this.error = error;
+        this.name = name;
     }
 
     public String status() {
@@ -39,6 +44,6 @@ public class SMTResult {
 
     @Override
     public String toString() {
-        return String.format("SMTResult: %s %s", status(), getError());
+        return String.format("SMTResult[%s]: %s %s", name, status(), getError());
     }
 }

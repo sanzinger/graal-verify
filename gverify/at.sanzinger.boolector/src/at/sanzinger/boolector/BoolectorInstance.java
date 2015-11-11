@@ -144,6 +144,7 @@ public class BoolectorInstance implements AutoCloseable {
     }
 
     private void printOut(String line) {
+        System.out.println(line);
         out.println(line);
         out.flush();
     }

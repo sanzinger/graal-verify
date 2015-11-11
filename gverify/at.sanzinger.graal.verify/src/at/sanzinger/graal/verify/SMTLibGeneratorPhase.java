@@ -300,7 +300,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             }
         }
         SMT smt = new SMT(prologue + declarations + definitions);
-        smt.addCheck(new ConstantFoldingCheck());
+        smt.addCheck(new ConstantFoldingCheck(s -> graph.getNode(Integer.parseInt(s.substring(1))), n -> n instanceof ConstantNode));
         if (!DumpSMTDir.hasDefaultValue()) {
             dumpSMT(graph, prologue, declarations, definitions);
         }
