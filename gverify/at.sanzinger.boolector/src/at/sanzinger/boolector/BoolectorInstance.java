@@ -145,13 +145,21 @@ public class BoolectorInstance implements AutoCloseable {
     }
 
     private void printOut(String line) {
+        printIdent(line, ">> ");
+        out.println(line);
+        out.flush();
+    }
+
+    private void printIdent(String line, String prefixString) {
+        if (line == null || true) {
+            return;
+        }
         StringBuilder prefix = new StringBuilder();
         for (int i = 0; i < level; i++) {
             prefix.append("  ");
         }
+        prefix.append(prefixString);
         System.out.println(prefix + line.replace(System.lineSeparator(), System.lineSeparator() + prefix));
-        out.println(line);
-        out.flush();
     }
 
     public void pop() {
@@ -208,6 +216,7 @@ public class BoolectorInstance implements AutoCloseable {
             String line = readLineWithTimeout(is, 2);
             if (line != null) {
                 line = line.trim();
+                printIdent(line, "<<  ");
                 result.add(line);
                 for (String searchedLine : lines) {
                     if (line.equals(searchedLine)) {

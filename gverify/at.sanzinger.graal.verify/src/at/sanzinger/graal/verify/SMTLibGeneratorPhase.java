@@ -302,6 +302,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         }
         SMT smt = new SMT(prologue + declarations + definitions);
         smt.addCheck(new ConstantFoldingCheck(s -> graph.getNode(Integer.parseInt(s.substring(1))), n -> n instanceof ConstantNode));
+        smt.addCheck(new EquivalenceCheck());
         if (!DumpSMTDir.hasDefaultValue()) {
             dumpSMT(graph, prologue, declarations, definitions);
         }
@@ -338,7 +339,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     }
 
     private static void check(SMT smt, List<ValueNode> definedNodes) {
-        addEqualityChecks(smt, definedNodes);
+// addEqualityChecks(smt, definedNodes);
         Boolector btor = getBoolector();
         if (btor != null) {
             try (BoolectorInstance bi = btor.newInstance()) {
@@ -357,24 +358,24 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         }
     }
 
-    private static void addEqualityChecks(SMT smt, List<ValueNode> definedNodes) {
-        int sz = definedNodes.size();
-        for (int i = 0; i < sz; i++) {
-            ValueNode ni = definedNodes.get(i);
-            String nni = getNodeString(ni);
-            for (int j = i + 1; j < sz; j++) {
-                if (i == j) {
-                    continue;
-                }
-                ValueNode nj = definedNodes.get(j);
-                String nnj = getNodeString(nj);
-                if (ni.stamp().equals(nj.stamp())) {
-                    String name = format("%s == %s", ni, nj);
-                    smt.addCheck(new Check(name, "(assert (not (= " + nni + " " + nnj + ")))"));
-                }
-            }
-        }
-    }
+// private static void addEqualityChecks(SMT smt, List<ValueNode> definedNodes) {
+// int sz = definedNodes.size();
+// for (int i = 0; i < sz; i++) {
+// ValueNode ni = definedNodes.get(i);
+// String nni = getNodeString(ni);
+// for (int j = i + 1; j < sz; j++) {
+// if (i == j) {
+// continue;
+// }
+// ValueNode nj = definedNodes.get(j);
+// String nnj = getNodeString(nj);
+// if (ni.stamp().equals(nj.stamp())) {
+// String name = format("%s == %s", ni, nj);
+// smt.addCheck(new Check(name, "(assert (not (= " + nni + " " + nnj + ")))"));
+// }
+// }
+// }
+// }
 
     private static void appendCrNonNull(StringBuilder sb, String v) {
         if (v != null) {
@@ -400,7 +401,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         return "n" + n.getId();
     }
 
-    private static Boolector getBoolector() {
+    static Boolector getBoolector() {
         if (boolector == null) {
             String btorPath;
             if (!Btor.hasDefaultValue()) {
