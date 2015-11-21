@@ -10,12 +10,12 @@ public class Boolector {
         btorCmd = cmd;
     }
 
-    public void verify() throws IllegalArgumentException {
+    public boolean verify() {
         String version = getVersion();
         if (version == null) {
-            throw new IllegalArgumentException(String.format("Boolector command `%s` did not work.", btorCmd));
+            return false;
         } else {
-            System.out.println(String.format("Found boolector version %s with command `%s`", version, btorCmd));
+            return true;
         }
     }
 
@@ -35,7 +35,6 @@ public class Boolector {
             }
             return stdout.trim();
         } catch (IOException e) {
-            e.printStackTrace();
             return null;
         }
     }

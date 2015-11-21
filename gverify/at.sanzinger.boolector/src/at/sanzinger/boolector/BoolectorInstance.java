@@ -19,6 +19,7 @@ public class BoolectorInstance implements AutoCloseable {
     private InputStream is;
     private InputStream errIs;
     private PrintWriter out;
+    private int level = 0;
 
     public BoolectorInstance(Boolector binary) {
         this.boolector = binary;
@@ -144,12 +145,17 @@ public class BoolectorInstance implements AutoCloseable {
     }
 
     private void printOut(String line) {
-        System.out.println(line);
+        StringBuilder prefix = new StringBuilder();
+        for (int i = 0; i < level; i++) {
+            prefix.append("  ");
+        }
+        System.out.println(prefix + line.replace(System.lineSeparator(), System.lineSeparator() + prefix));
         out.println(line);
         out.flush();
     }
 
     public void pop() {
+        level--;
         printOut("(pop 1)");
     }
 
@@ -160,6 +166,7 @@ public class BoolectorInstance implements AutoCloseable {
         if (error != null) {
             throw new RuntimeException(error);
         }
+        level++;
         return new FrameHandle();
     }
 

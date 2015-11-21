@@ -29,6 +29,7 @@ import com.oracle.graal.compiler.common.type.AbstractPointerStamp;
 import com.oracle.graal.compiler.common.type.ObjectStamp;
 import com.oracle.graal.compiler.common.type.PrimitiveStamp;
 import com.oracle.graal.compiler.common.type.Stamp;
+import com.oracle.graal.debug.TTY;
 import com.oracle.graal.graph.Node;
 import com.oracle.graal.graph.NodeClass;
 import com.oracle.graal.graph.iterators.NodeIterable;
@@ -339,16 +340,18 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     private static void check(SMT smt, List<ValueNode> definedNodes) {
         addEqualityChecks(smt, definedNodes);
         Boolector btor = getBoolector();
-        try (BoolectorInstance bi = btor.newInstance()) {
-            SMTResult[] results = bi.execute(smt);
-            for (int i = 0; i < results.length; i++) {
-                SMTResult result = results[i];
-                Function<BoolectorInstance, SMTResult> check = smt.getChecks().get(i);
-                if (result.isError()) {
-                    println("Error on checking %s: %s", check, result.getError());
-                }
-                if (!result.isSat()) {
-                    println("unsat: %s", result.getName());
+        if (btor != null) {
+            try (BoolectorInstance bi = btor.newInstance()) {
+                SMTResult[] results = bi.execute(smt);
+                for (int i = 0; i < results.length; i++) {
+                    SMTResult result = results[i];
+                    Function<BoolectorInstance, SMTResult> check = smt.getChecks().get(i);
+                    if (result.isError()) {
+                        println("Error on checking %s: %s", check, result.getError());
+                    }
+                    if (!result.isSat()) {
+                        println("unsat: %s", result.getName());
+                    }
                 }
             }
         }
@@ -406,7 +409,11 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
                 btorPath = "boolector";
             }
             boolector = new Boolector(btorPath); // write race ok
-            boolector.verify();
+            if (!boolector.verify()) {
+                boolector = null;
+                TTY.println("Could not find boolector with command: " + btorPath);
+                return null;
+            }
         }
         return boolector;
     }
