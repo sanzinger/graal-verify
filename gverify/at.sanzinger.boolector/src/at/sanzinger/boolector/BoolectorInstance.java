@@ -213,6 +213,7 @@ public class BoolectorInstance implements AutoCloseable {
         List<String> result = new ArrayList<>(10);
         long start = System.currentTimeMillis();
         while (start + timeout > System.currentTimeMillis()) {
+            ensureOpen();
             String line = readLineWithTimeout(is, 2);
             if (line != null) {
                 line = line.trim();

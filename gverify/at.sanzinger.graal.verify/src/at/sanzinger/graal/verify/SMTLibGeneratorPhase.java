@@ -24,10 +24,11 @@ import at.sanzinger.boolector.SMT;
 import at.sanzinger.graal.verify.gen.OperatorDescription;
 
 import com.oracle.graal.compiler.common.type.AbstractPointerStamp;
-import com.oracle.graal.compiler.common.type.FloatStamp;
+import com.oracle.graal.compiler.common.type.IntegerStamp;
 import com.oracle.graal.compiler.common.type.ObjectStamp;
 import com.oracle.graal.compiler.common.type.PrimitiveStamp;
 import com.oracle.graal.compiler.common.type.Stamp;
+import com.oracle.graal.compiler.common.type.VoidStamp;
 import com.oracle.graal.debug.TTY;
 import com.oracle.graal.graph.Node;
 import com.oracle.graal.graph.NodeClass;
@@ -47,6 +48,7 @@ import com.oracle.graal.nodes.ValuePhiNode;
 import com.oracle.graal.nodes.calc.AddNode;
 import com.oracle.graal.nodes.calc.AndNode;
 import com.oracle.graal.nodes.calc.DivNode;
+import com.oracle.graal.nodes.calc.FloatConvertNode;
 import com.oracle.graal.nodes.calc.IntegerBelowNode;
 import com.oracle.graal.nodes.calc.IntegerDivNode;
 import com.oracle.graal.nodes.calc.IntegerEqualsNode;
@@ -55,13 +57,16 @@ import com.oracle.graal.nodes.calc.IntegerRemNode;
 import com.oracle.graal.nodes.calc.IntegerTestNode;
 import com.oracle.graal.nodes.calc.LeftShiftNode;
 import com.oracle.graal.nodes.calc.MulNode;
+import com.oracle.graal.nodes.calc.NarrowNode;
 import com.oracle.graal.nodes.calc.NegateNode;
 import com.oracle.graal.nodes.calc.NotNode;
 import com.oracle.graal.nodes.calc.OrNode;
+import com.oracle.graal.nodes.calc.ReinterpretNode;
 import com.oracle.graal.nodes.calc.RemNode;
 import com.oracle.graal.nodes.calc.RightShiftNode;
 import com.oracle.graal.nodes.calc.SubNode;
 import com.oracle.graal.nodes.calc.UnsignedRightShiftNode;
+import com.oracle.graal.nodes.extended.ForeignCallNode;
 import com.oracle.graal.phases.BasePhase;
 import com.oracle.graal.phases.tiers.LowTierContext;
 
@@ -78,6 +83,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
 
     private static Boolector boolector;
     private static final AtomicInteger unknownCounter = new AtomicInteger();
+    private static final OperatorDescription<ValueNode> defaultDescription = new OperatorDescription<>(ValueNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, n -> null);
 
     private static <T extends ValueNode> void n2o(NodeClass<T> nodeClass, String opName) {
         n2o.put(nodeClass, new OperatorDescription<>(nodeClass, (n) -> defaultDeclaration(n), (n) -> defaultDefinition(opName, n)));
@@ -99,6 +105,10 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         n2o(RemNode.TYPE, "bvsrem");
         n2o(ParameterNode.TYPE, null);
         n2o(InvokeNode.TYPE, null);
+        n2o(ForeignCallNode.TYPE, null);
+        n2o(FloatConvertNode.TYPE, null);
+        n2o(ReinterpretNode.TYPE, null);
+        n2o(NarrowNode.TYPE, null);
         n2o(IntegerLessThanNode.TYPE, "bvslt");
         n2o(IntegerBelowNode.TYPE, "bvult");
         n2o(IntegerEqualsNode.TYPE, "=");
@@ -119,9 +129,6 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         }
         StringBuilder sb = new StringBuilder();
         if (n.inputs().count() > 0) {
-            if (!allCaptured(n.inputs())) {
-                return null;
-            }
             int bits = getBits(n);
             sb.append("(assert (= ");
             sb.append(getNodeString(n));
@@ -155,7 +162,6 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             NodeIterable<? extends Node> predNodeIter = n.merge().cfgPredecessors();
             pred = predNodeIter;
             count = predNodeIter.count();
-
         } else if (merge instanceof LoopBeginNode) {
             return null;
         }
@@ -227,6 +233,8 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             return ps.getBits();
         } else if (stamp instanceof ObjectStamp || stamp instanceof AbstractPointerStamp) {
             return 64;
+        } else if (stamp instanceof VoidStamp) {
+            return 0;
         } else {
             throw JVMCIError.unimplemented(n.toString() + " " + n.stamp());
         }
@@ -234,7 +242,9 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
 
     private static String declaration(ValueNode n, int bits) {
         String type;
-        if (bits == 1) {
+        if (bits == 0) {
+            return null;
+        } else if (bits == 1) {
             type = "Bool";
         } else {
             type = String.format("(_ BitVec %d)", bits);
@@ -289,14 +299,15 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         StringBuilder definitions = new StringBuilder();
         List<ValueNode> definedNodes = new ArrayList<>();
         for (Node n : graph.getNodes()) {
-            if (isCaptured(n)) {
-                @SuppressWarnings("unchecked")
-                OperatorDescription<ValueNode> d = (OperatorDescription<ValueNode>) n2o.get(n.getNodeClass());
-                if (d != null) {
-                    appendCrNonNull(declarations, d.getDeclaration().apply((ValueNode) n));
-                    appendCrNonNull(definitions, d.getDefinition().apply((ValueNode) n));
-                    definedNodes.add((ValueNode) n);
-                }
+            @SuppressWarnings("unchecked")
+            OperatorDescription<ValueNode> d = (OperatorDescription<ValueNode>) n2o.get(n.getNodeClass());
+            if (d == null && isCaptured(n)) {
+                d = defaultDescription;
+            }
+            if (d != null) {
+                appendCrNonNull(declarations, d.getDeclaration().apply((ValueNode) n));
+                appendCrNonNull(definitions, d.getDefinition().apply((ValueNode) n));
+                definedNodes.add((ValueNode) n);
             }
         }
         SMT smt = new SMT(prologue + declarations + definitions);
@@ -319,8 +330,8 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     }
 
     private static boolean isCaptured(Node n) {
-        if (n instanceof ConstantNode && ((ConstantNode) n).stamp() instanceof FloatStamp) {
-            return false;
+        if (n instanceof ValueNode && ((ValueNode) n).stamp() instanceof IntegerStamp) {
+            return true;
         }
         return n2o.containsKey(n.getNodeClass());
     }

@@ -29,4 +29,9 @@ public final class OperatorDescription<T extends Node> {
     public Function<T, String> getDefinition() {
         return definition;
     }
+
+    @Override
+    public String toString() {
+        return String.format("OperatorDescription for %s ", nodeClass);
+    }
 }
