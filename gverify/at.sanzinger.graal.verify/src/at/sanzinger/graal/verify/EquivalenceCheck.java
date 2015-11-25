@@ -57,7 +57,7 @@ public class EquivalenceCheck implements Function<BoolectorInstance, CheckResult
         while (getNextPair(pair, p)) {
             SMTModel model;
             if ((model = sat(btor, pair.k, pair.l)) != null) {
-                refineP(p, pair, model);
+                refineP(p, pair.d, model);
             } else {
                 e.put(pair.l, pair.k);
                 pair.d.remove(pair.k);
@@ -84,9 +84,9 @@ public class EquivalenceCheck implements Function<BoolectorInstance, CheckResult
         }
     }
 
-    private static void refineP(Set<Set<Definition>> p, Pair pair, SMTModel model) {
+    private static void refineP(Set<Set<Definition>> p, Set<Definition> definitions, SMTModel model) {
         HashMap<String, Set<Definition>> res = new HashMap<>();
-        for (Definition d : pair.d) {
+        for (Definition d : definitions) {
             Definition newDefinition = model.getDefinition(d.getName());
             if (newDefinition == null) {
                 model.getDefinition(d.getName());
@@ -99,7 +99,7 @@ public class EquivalenceCheck implements Function<BoolectorInstance, CheckResult
             }
             s.add(d);
         }
-        boolean removed = p.remove(pair.d);
+        boolean removed = p.remove(definitions);
         assert removed : "Must be in set";
         p.addAll(res.values());
     }
