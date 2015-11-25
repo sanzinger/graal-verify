@@ -10,6 +10,10 @@ public class Boolector {
         btorCmd = cmd;
     }
 
+    public Boolector() {
+        this("boolector");
+    }
+
     public boolean verify() {
         String version = getVersion();
         if (version == null) {

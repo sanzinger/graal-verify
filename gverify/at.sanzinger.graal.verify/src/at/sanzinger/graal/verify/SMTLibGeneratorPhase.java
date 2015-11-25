@@ -1,7 +1,6 @@
 package at.sanzinger.graal.verify;
 
 import static com.oracle.graal.debug.TTY.println;
-import static java.lang.String.format;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -20,12 +19,12 @@ import jdk.vm.ci.options.OptionType;
 import jdk.vm.ci.options.OptionValue;
 import at.sanzinger.boolector.Boolector;
 import at.sanzinger.boolector.BoolectorInstance;
+import at.sanzinger.boolector.CheckResult;
 import at.sanzinger.boolector.SMT;
-import at.sanzinger.boolector.SMT.Check;
-import at.sanzinger.boolector.SMTResult;
 import at.sanzinger.graal.verify.gen.OperatorDescription;
 
 import com.oracle.graal.compiler.common.type.AbstractPointerStamp;
+import com.oracle.graal.compiler.common.type.FloatStamp;
 import com.oracle.graal.compiler.common.type.ObjectStamp;
 import com.oracle.graal.compiler.common.type.PrimitiveStamp;
 import com.oracle.graal.compiler.common.type.Stamp;
@@ -290,7 +289,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         StringBuilder definitions = new StringBuilder();
         List<ValueNode> definedNodes = new ArrayList<>();
         for (Node n : graph.getNodes()) {
-            if (n instanceof ValueNode) {
+            if (isCaptured(n)) {
                 @SuppressWarnings("unchecked")
                 OperatorDescription<ValueNode> d = (OperatorDescription<ValueNode>) n2o.get(n.getNodeClass());
                 if (d != null) {
@@ -301,12 +300,13 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             }
         }
         SMT smt = new SMT(prologue + declarations + definitions);
-        smt.addCheck(new ConstantFoldingCheck(s -> graph.getNode(Integer.parseInt(s.substring(1))), n -> n instanceof ConstantNode));
-        smt.addCheck(new EquivalenceCheck());
+        Function<String, Node> s2n = s -> graph.getNode(Integer.parseInt(s.substring(1)));
+        smt.addCheck(new ConstantFoldingCheck(s2n, n -> n instanceof ConstantNode));
+        smt.addCheck(new EquivalenceCheck(n -> s2n.apply(n).toString()));
         if (!DumpSMTDir.hasDefaultValue()) {
             dumpSMT(graph, prologue, declarations, definitions);
         }
-        check(smt, definedNodes);
+        check(smt);
     }
 
     private static boolean allCaptured(Iterable<? extends Node> nodes) {
@@ -319,6 +319,9 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     }
 
     private static boolean isCaptured(Node n) {
+        if (n instanceof ConstantNode && ((ConstantNode) n).stamp() instanceof FloatStamp) {
+            return false;
+        }
         return n2o.containsKey(n.getNodeClass());
     }
 
@@ -338,44 +341,20 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         }
     }
 
-    private static void check(SMT smt, List<ValueNode> definedNodes) {
-// addEqualityChecks(smt, definedNodes);
+    private static void check(SMT smt) {
         Boolector btor = getBoolector();
         if (btor != null) {
             try (BoolectorInstance bi = btor.newInstance()) {
-                SMTResult[] results = bi.execute(smt);
+                CheckResult[] results = bi.execute(smt);
                 for (int i = 0; i < results.length; i++) {
-                    SMTResult result = results[i];
-                    Function<BoolectorInstance, SMTResult> check = smt.getChecks().get(i);
-                    if (result.isError()) {
-                        println("Error on checking %s: %s", check, result.getError());
-                    }
-                    if (!result.isSat()) {
-                        println("unsat: %s", result.getName());
+                    CheckResult result = results[i];
+                    if (result.getState().equals(CheckResult.State.ERROR) || result.getState().equals(CheckResult.State.SUSPICIOUS)) {
+                        println(result.toString());
                     }
                 }
             }
         }
     }
-
-// private static void addEqualityChecks(SMT smt, List<ValueNode> definedNodes) {
-// int sz = definedNodes.size();
-// for (int i = 0; i < sz; i++) {
-// ValueNode ni = definedNodes.get(i);
-// String nni = getNodeString(ni);
-// for (int j = i + 1; j < sz; j++) {
-// if (i == j) {
-// continue;
-// }
-// ValueNode nj = definedNodes.get(j);
-// String nnj = getNodeString(nj);
-// if (ni.stamp().equals(nj.stamp())) {
-// String name = format("%s == %s", ni, nj);
-// smt.addCheck(new Check(name, "(assert (not (= " + nni + " " + nnj + ")))"));
-// }
-// }
-// }
-// }
 
     private static void appendCrNonNull(StringBuilder sb, String v) {
         if (v != null) {
@@ -401,7 +380,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         return "n" + n.getId();
     }
 
-    static Boolector getBoolector() {
+    public static Boolector getBoolector() {
         if (boolector == null) {
             String btorPath;
             if (!Btor.hasDefaultValue()) {

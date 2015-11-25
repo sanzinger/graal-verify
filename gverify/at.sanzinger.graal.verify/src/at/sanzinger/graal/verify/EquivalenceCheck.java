@@ -2,34 +2,54 @@ package at.sanzinger.graal.verify;
 
 import static java.lang.String.format;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.function.Function;
 
 import at.sanzinger.boolector.BoolectorInstance;
 import at.sanzinger.boolector.BoolectorInstance.FrameHandle;
+import at.sanzinger.boolector.CheckResult;
 import at.sanzinger.boolector.SMTModel;
 import at.sanzinger.boolector.SMTModel.Definition;
-import at.sanzinger.boolector.SMTResult;
 
-public class EquivalenceCheck implements Function<BoolectorInstance, SMTResult> {
+public class EquivalenceCheck implements Function<BoolectorInstance, CheckResult> {
+    private final Function<String, String> symbolTranslator;
+
+    public EquivalenceCheck(Function<String, String> symbolTranslator) {
+        this.symbolTranslator = symbolTranslator;
+    }
+
     public EquivalenceCheck() {
-
+        this(n -> n);
     }
 
     @Override
-    public SMTResult apply(BoolectorInstance t) {
+    public CheckResult apply(BoolectorInstance t) {
         try (FrameHandle fh = t.push()) {
-            equivalenceExtraction(t);
-            return new SMTResult(Arrays.asList("sat"), null);
+            Map<Definition, Definition> equivalences = equivalenceExtraction(t);
+            CheckResult result;
+            if (equivalences.size() > 0) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("Equivalences found: ");
+                for (Entry<Definition, Definition> d : equivalences.entrySet()) {
+                    String a = symbolTranslator.apply(d.getKey().getName());
+                    String b = symbolTranslator.apply(d.getValue().getName());
+                    sb.append(format("%s==%s, ", a, b));
+                }
+                result = new CheckResult(this, CheckResult.State.SUSPICIOUS, sb.substring(0, sb.length() - 2));
+            } else {
+                result = new CheckResult(this, CheckResult.State.OK);
+            }
+            return result;
         }
     }
 
-    private static void equivalenceExtraction(BoolectorInstance btor) {
+    private static HashMap<Definition, Definition> equivalenceExtraction(BoolectorInstance btor) {
         SMTModel rootModel = getModel(btor);
         Set<Set<Definition>> p = buildP(rootModel);
         HashMap<Definition, Definition> e = new HashMap<>();
@@ -43,13 +63,14 @@ public class EquivalenceCheck implements Function<BoolectorInstance, SMTResult> 
                 pair.d.remove(pair.k);
             }
         }
-        System.out.println(e);
+        return e;
     }
 
     private static SMTModel sat(BoolectorInstance btor, Definition k, Definition l) {
         try (FrameHandle fh = btor.push()) {
             String assertion = format("(assert (not (= %s %s)))", k.getName(), l.getName());
-            if (btor.checkSat(assertion).isSat()) {
+            btor.define(assertion);
+            if (btor.checkSat().isSat()) {
                 return getModel(btor);
             } else {
                 return null;
@@ -114,6 +135,11 @@ public class EquivalenceCheck implements Function<BoolectorInstance, SMTResult> 
         Set<Set<Definition>> pSet = Collections.newSetFromMap(new IdentityHashMap<Set<Definition>, Boolean>());
         pSet.addAll(p.values());
         return pSet;
+    }
+
+    @Override
+    public String toString() {
+        return "EquivalenceCheck";
     }
 
     private static final class Pair {

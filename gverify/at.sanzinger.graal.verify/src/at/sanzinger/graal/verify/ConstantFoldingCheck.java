@@ -1,18 +1,18 @@
 package at.sanzinger.graal.verify;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.function.Function;
-
-import com.oracle.graal.graph.Node;
 
 import at.sanzinger.boolector.BoolectorInstance;
 import at.sanzinger.boolector.BoolectorInstance.FrameHandle;
+import at.sanzinger.boolector.CheckResult;
 import at.sanzinger.boolector.SMTModel;
 import at.sanzinger.boolector.SMTModel.Definition;
 import at.sanzinger.boolector.SMTResult;
 
-public class ConstantFoldingCheck implements Function<BoolectorInstance, SMTResult> {
+import com.oracle.graal.graph.Node;
+
+public class ConstantFoldingCheck implements Function<BoolectorInstance, CheckResult> {
     private final Function<String, Node> nodeTranslator;
     private final Function<Node, Boolean> isConstant;
 
@@ -22,7 +22,7 @@ public class ConstantFoldingCheck implements Function<BoolectorInstance, SMTResu
         this.isConstant = isConstant;
     }
 
-    public SMTResult apply(BoolectorInstance t) {
+    public CheckResult apply(BoolectorInstance t) {
         ArrayList<SMTResult> constantFoldable = new ArrayList<>();
         try (FrameHandle h = t.push()) {
             SMTModel m = t.getModel();
@@ -33,7 +33,8 @@ public class ConstantFoldingCheck implements Function<BoolectorInstance, SMTResu
                 }
                 try (FrameHandle h2 = t.push()) {
                     String check = String.format("(assert (not (= %s %s)))", d.getName(), d.getValue());
-                    SMTResult result = t.checkSat(check);
+                    t.define(check);
+                    SMTResult result = t.checkSat();
                     result.setName(String.format("Node %s is constant with value %s", n, d.getValue()));
                     if (!result.isSat()) {
                         constantFoldable.add(result);
@@ -41,6 +42,15 @@ public class ConstantFoldingCheck implements Function<BoolectorInstance, SMTResu
                 }
             }
         }
-        return new SMTResult(Arrays.asList("Constant fold check revealed following: " + constantFoldable, constantFoldable.size() > 0 ? "unsat" : "sat"), null, constantFoldable.toString());
+        if (constantFoldable.size() == 0) {
+            return new CheckResult(this, CheckResult.State.OK);
+        } else {
+            return new CheckResult(this, CheckResult.State.SUSPICIOUS, constantFoldable.toString());
+        }
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Constant folding check");
     }
 }

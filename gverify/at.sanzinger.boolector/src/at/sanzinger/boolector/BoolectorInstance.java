@@ -79,12 +79,12 @@ public class BoolectorInstance implements AutoCloseable {
         }
     }
 
-    public SMTResult[] execute(SMT smt) {
+    public CheckResult[] execute(SMT smt) {
         ensureOpen();
         printOut(smt.getModel());
-        SMTResult[] results = new SMTResult[smt.getChecks().size()];
+        CheckResult[] results = new CheckResult[smt.getChecks().size()];
         int i = 0;
-        for (Function<BoolectorInstance, SMTResult> c : smt.getChecks()) {
+        for (Function<BoolectorInstance, CheckResult> c : smt.getChecks()) {
             results[i++] = c.apply(this);
         }
         return results;
@@ -111,8 +111,8 @@ public class BoolectorInstance implements AutoCloseable {
         }
     }
 
-    public SMTResult checkSat(String check) {
-        define(check);
+    public SMTResult checkSat() {
+        ensureOpen();
         printOut("(check-sat)");
         List<String> lines;
         long waitUntil = System.currentTimeMillis() + 5000;

@@ -6,41 +6,27 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.CharBuffer;
 
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import at.sanzinger.boolector.Boolector;
 import at.sanzinger.boolector.BoolectorInstance;
 import at.sanzinger.boolector.BoolectorInstance.FrameHandle;
-import at.sanzinger.boolector.SMT;
-import at.sanzinger.boolector.SMT.Check;
 import at.sanzinger.boolector.SMTModel;
 import at.sanzinger.boolector.SMTModel.Definition;
 import at.sanzinger.boolector.SMTResult;
 
 public class BoolectorTest {
-    private static String BTOR_HOME;
     private Boolector btor;
-
-    @BeforeClass
-    public static void setUpClass() {
-        BTOR_HOME = System.getenv("BTOR_HOME");
-        if (BTOR_HOME == null || BTOR_HOME.length() == 0) {
-            fail("BTOR_HOME must be set");
-        }
-    }
 
     @Before
     public void setUp() {
-        btor = new Boolector(BTOR_HOME + File.separator + "boolector");
+        btor = new Boolector();
     }
 
     @Test
@@ -57,16 +43,20 @@ public class BoolectorTest {
 
     @Test
     public void executeBtor() throws Exception {
-        SMT s = new SMT(rr("sample1.smt2"));
-        s.addCheck(new Check("sample1_q1", rr("sample1_q1.smt2")));
-        s.addCheck(new Check("sample1_q1", rr("sample1_q2.smt2")));
         try (BoolectorInstance i = btor.newInstance()) {
-            SMTResult[] r = i.execute(s);
-            assertEquals(2, r.length);
-            assertEquals("unsat", r[0].status());
-            assertNull(r[0].getError());
-            assertEquals("sat", r[1].status());
-            assertNull(r[1].getError());
+            i.define(rr("sample1.smt2"));
+            try (FrameHandle fh = i.push()) {
+                i.define(rr("sample1_q1.smt2"));
+                SMTResult r = i.checkSat();
+                assertEquals("unsat", r.status());
+                assertNull(r.getError());
+            }
+            try (FrameHandle fh = i.push()) {
+                i.define(rr("sample1_q2.smt2"));
+                SMTResult r = i.checkSat();
+                assertEquals("sat", r.status());
+                assertNull(r.getError());
+            }
         }
     }
 
@@ -75,16 +65,14 @@ public class BoolectorTest {
         BoolectorInstance escape;
         long start = currentTimeMillis();
         try (BoolectorInstance i = btor.newInstance()) {
-            SMT s = new SMT("");
-            s.addCheck(new Check("test", ""));
             assertFalse(i.isRunning());
-            SMTResult[] r = i.execute(s);
-            assertEquals("sat", r[0].status());
-            assertNull(r[0].getError());
+            SMTResult r = i.checkSat();
+            assertEquals("sat", r.status());
+            assertNull(r.getError());
             assertTrue(i.isRunning());
             escape = i;
         }
-        assertTrue("Must be executed in less than 50 ms", currentTimeMillis() - start < 50);
+        assertTrue("Must be executed in less than 300 ms", currentTimeMillis() - start < 300);
 
         assertFalse(escape.isRunning());
     }
@@ -92,10 +80,9 @@ public class BoolectorTest {
     @Test
     public void testSinlgelineError() throws Exception {
         try (BoolectorInstance i = btor.newInstance()) {
-            SMT s = new SMT("(set-logic UNKNOWN)");
-            s.addCheck(new Check("test", ""));
             try {
-                i.execute(s);
+                i.define("(set-logic UNKNOWN)");
+                i.checkSat();
             } catch (Exception e) {
                 assertEquals("boolector: <stdin>:1:12: expected logic at 'UNKNOWN'" + lineSeparator(), e.getMessage());
             }
@@ -106,15 +93,15 @@ public class BoolectorTest {
     public void testNestedPush() {
         try (BoolectorInstance i = btor.newInstance()) {
             try (FrameHandle h = i.push()) {
-                SMT s = new SMT("(set-logic QF_BV)\n(declare-fun n () Bool)");
-                s.addCheck(new Check("satisfyable", "(assert (= n #b1))\n(assert (= n #b0))"));
-                SMTResult r = i.execute(s)[0];
+                i.define("(set-logic QF_BV)\n(declare-fun n () Bool)");
+                i.define("(assert (= n #b1))\n(assert (= n #b0))");
+                SMTResult r = i.checkSat();
                 assertEquals("unsat", r.status());
             }
             try (FrameHandle h = i.push()) {
-                SMT s = new SMT("(set-logic QF_BV)\n(declare-fun n () Bool)");
-                s.addCheck(new Check("satisfyable", "(assert (= n #b1))"));
-                SMTResult r = i.execute(s)[0];
+                i.define("(set-logic QF_BV)\n(declare-fun n () Bool)");
+                i.define("(assert (= n #b1))");
+                SMTResult r = i.checkSat();
                 assertEquals("sat", r.status());
             }
         }
