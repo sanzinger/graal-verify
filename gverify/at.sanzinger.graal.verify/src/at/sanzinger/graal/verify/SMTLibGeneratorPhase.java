@@ -6,8 +6,11 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
@@ -24,6 +27,8 @@ import at.sanzinger.boolector.CheckResult;
 import at.sanzinger.boolector.SMT;
 import at.sanzinger.graal.verify.gen.OperatorDescription;
 
+import com.oracle.graal.asm.amd64.AMD64Address;
+import com.oracle.graal.compiler.amd64.AMD64AddressNode;
 import com.oracle.graal.compiler.common.type.AbstractPointerStamp;
 import com.oracle.graal.compiler.common.type.FloatStamp;
 import com.oracle.graal.compiler.common.type.IllegalStamp;
@@ -35,10 +40,14 @@ import com.oracle.graal.compiler.common.type.VoidStamp;
 import com.oracle.graal.debug.TTY;
 import com.oracle.graal.graph.Node;
 import com.oracle.graal.graph.NodeClass;
+import com.oracle.graal.graph.NodeClassIterable;
+import com.oracle.graal.hotspot.amd64.AMD64HotSpotMove.UncompressPointer;
+import com.oracle.graal.hotspot.nodes.CompressionNode;
 import com.oracle.graal.nodes.ConstantNode;
 import com.oracle.graal.nodes.InvokeNode;
 import com.oracle.graal.nodes.LogicNode;
 import com.oracle.graal.nodes.ParameterNode;
+import com.oracle.graal.nodes.PiNode;
 import com.oracle.graal.nodes.StructuredGraph;
 import com.oracle.graal.nodes.ValueNode;
 import com.oracle.graal.nodes.ValuePhiNode;
@@ -46,12 +55,15 @@ import com.oracle.graal.nodes.calc.AddNode;
 import com.oracle.graal.nodes.calc.AndNode;
 import com.oracle.graal.nodes.calc.DivNode;
 import com.oracle.graal.nodes.calc.FloatConvertNode;
+import com.oracle.graal.nodes.calc.FloatEqualsNode;
+import com.oracle.graal.nodes.calc.FloatLessThanNode;
 import com.oracle.graal.nodes.calc.IntegerBelowNode;
 import com.oracle.graal.nodes.calc.IntegerDivNode;
 import com.oracle.graal.nodes.calc.IntegerEqualsNode;
 import com.oracle.graal.nodes.calc.IntegerLessThanNode;
 import com.oracle.graal.nodes.calc.IntegerRemNode;
 import com.oracle.graal.nodes.calc.IntegerTestNode;
+import com.oracle.graal.nodes.calc.IsNullNode;
 import com.oracle.graal.nodes.calc.LeftShiftNode;
 import com.oracle.graal.nodes.calc.MulNode;
 import com.oracle.graal.nodes.calc.NarrowNode;
@@ -64,8 +76,11 @@ import com.oracle.graal.nodes.calc.RightShiftNode;
 import com.oracle.graal.nodes.calc.SubNode;
 import com.oracle.graal.nodes.calc.UnsignedRightShiftNode;
 import com.oracle.graal.nodes.extended.ForeignCallNode;
+import com.oracle.graal.nodes.memory.FloatingReadNode;
+import com.oracle.graal.nodes.memory.ReadNode;
 import com.oracle.graal.phases.BasePhase;
 import com.oracle.graal.phases.tiers.LowTierContext;
+import com.oracle.graal.word.nodes.WordCastNode;
 
 public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     private static final IdentityHashMap<NodeClass<? extends ValueNode>, OperatorDescription<?>> n2o = new IdentityHashMap<>();
@@ -97,6 +112,11 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             sb.append(String.format("(declare-fun f%s ( (_ BitVec 32) (_ BitVec 32) ) (_ BitVec 32) )\n", i));
             sb.append(String.format("(declare-fun d%s ( (_ BitVec 64) (_ BitVec 64) ) (_ BitVec 64) )\n", i));
         }
+        for (String i : new String[]{"eq", "lt"}) {
+            sb.append(String.format("(declare-fun f%s ( (_ BitVec 32) (_ BitVec 32) ) Bool )\n", i));
+            sb.append(String.format("(declare-fun d%s ( (_ BitVec 64) (_ BitVec 64) ) Bool )\n", i));
+        }
+        sb.append("(declare-fun uncompress ( (_ BitVec 64) ) (_ BitVec 64) )\n");
         return sb.toString();
     }
 
@@ -121,24 +141,43 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         n2o(ReinterpretNode.TYPE, null);
         n2o(NarrowNode.TYPE, null);
         n2o(IntegerLessThanNode.TYPE, "bvslt");
+        arithmetic(FloatLessThanNode.TYPE, "lt");
         n2o(IntegerBelowNode.TYPE, "bvult");
         n2o(IntegerEqualsNode.TYPE, "=");
+        arithmetic(FloatEqualsNode.TYPE, "eq");
         n2o(IntegerTestNode.TYPE, "=");
         n2o(IntegerRemNode.TYPE, "bvurem");
         n2o(IntegerDivNode.TYPE, "bvsdiv");
         n2o(UnsignedRightShiftNode.TYPE, "bvlshr");
         n2o(LeftShiftNode.TYPE, "bvshl");
         n2o(RightShiftNode.TYPE, "bvashr");
+
+        n2o(CompressionNode.TYPE, "uncompress");
+
+        n2o(new OperatorDescription<>(IsNullNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s (bvsub %s %s)))", getNodeString(n), getNodeString(n),
+                        getNodeString(n))));
+        n2o(new OperatorDescription<>(AMD64AddressNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> null));
+        n2o(new OperatorDescription<>(PiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.object()))));
+        n2o(new OperatorDescription<>(ReadNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> null));
+        n2o(new OperatorDescription<>(FloatingReadNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> null));
+        n2o(new OperatorDescription<>(WordCastNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.getInput()))));
         n2o(new OperatorDescription<>(ValuePhiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::phiDefinition));
         n2o(new OperatorDescription<>(ConstantNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::defineConstant));
     }
 
     private static String defaultArithmeticDefinition(ValueNode n, String op) {
         String prefix;
-        if (n.stamp() instanceof IntegerStamp) {
+        Stamp stamp;
+        if (n instanceof LogicNode) {
+            NodeClassIterable inputs = n.inputs();
+            stamp = ((ValueNode) inputs.first()).stamp();
+        } else {
+            stamp = n.stamp();
+        }
+        if (stamp instanceof IntegerStamp) {
             prefix = "bv";
-        } else if (n.stamp() instanceof FloatStamp) {
-            FloatStamp fs = (FloatStamp) n.stamp();
+        } else if (stamp instanceof FloatStamp) {
+            FloatStamp fs = (FloatStamp) stamp;
             if (fs.getBits() == JavaKind.Float.getBitCount()) {
                 prefix = "f";
             } else if (fs.getBits() == JavaKind.Double.getBitCount()) {
@@ -147,7 +186,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
                 throw JVMCIError.shouldNotReachHere();
             }
         } else {
-            throw JVMCIError.shouldNotReachHere(n.stamp().toString());
+            throw JVMCIError.shouldNotReachHere(n + " " + n.stamp().toString());
         }
         return defaultDefinition(prefix + op, n);
     }
@@ -292,7 +331,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     }
 
     private static boolean isCaptured(Node n) {
-        if (n instanceof ValueNode && ((ValueNode) n).stamp() instanceof IntegerStamp) {
+        if (n instanceof ValueNode && (((ValueNode) n).stamp() instanceof IntegerStamp || ((ValueNode) n).stamp() instanceof FloatStamp)) {
             return true;
         }
         return n2o.containsKey(n.getNodeClass());
@@ -322,7 +361,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
                 for (int i = 0; i < results.length; i++) {
                     CheckResult result = results[i];
                     if (result.getState().equals(CheckResult.State.ERROR) || result.getState().equals(CheckResult.State.SUSPICIOUS)) {
-                        println(result.toString());
+                        println("\n" + result.toString() + "\n");
                     }
                 }
             }
