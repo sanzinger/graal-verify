@@ -6,11 +6,8 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
@@ -27,7 +24,6 @@ import at.sanzinger.boolector.CheckResult;
 import at.sanzinger.boolector.SMT;
 import at.sanzinger.graal.verify.gen.OperatorDescription;
 
-import com.oracle.graal.asm.amd64.AMD64Address;
 import com.oracle.graal.compiler.amd64.AMD64AddressNode;
 import com.oracle.graal.compiler.common.type.AbstractPointerStamp;
 import com.oracle.graal.compiler.common.type.FloatStamp;
@@ -41,12 +37,13 @@ import com.oracle.graal.debug.TTY;
 import com.oracle.graal.graph.Node;
 import com.oracle.graal.graph.NodeClass;
 import com.oracle.graal.graph.NodeClassIterable;
-import com.oracle.graal.hotspot.amd64.AMD64HotSpotMove.UncompressPointer;
 import com.oracle.graal.hotspot.nodes.CompressionNode;
+import com.oracle.graal.hotspot.word.PointerCastNode;
 import com.oracle.graal.nodes.ConstantNode;
 import com.oracle.graal.nodes.InvokeNode;
 import com.oracle.graal.nodes.LogicNode;
 import com.oracle.graal.nodes.ParameterNode;
+import com.oracle.graal.nodes.PiArrayNode;
 import com.oracle.graal.nodes.PiNode;
 import com.oracle.graal.nodes.StructuredGraph;
 import com.oracle.graal.nodes.ValueNode;
@@ -69,7 +66,9 @@ import com.oracle.graal.nodes.calc.MulNode;
 import com.oracle.graal.nodes.calc.NarrowNode;
 import com.oracle.graal.nodes.calc.NegateNode;
 import com.oracle.graal.nodes.calc.NotNode;
+import com.oracle.graal.nodes.calc.ObjectEqualsNode;
 import com.oracle.graal.nodes.calc.OrNode;
+import com.oracle.graal.nodes.calc.PointerEqualsNode;
 import com.oracle.graal.nodes.calc.ReinterpretNode;
 import com.oracle.graal.nodes.calc.RemNode;
 import com.oracle.graal.nodes.calc.RightShiftNode;
@@ -147,6 +146,8 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         n2o(IntegerEqualsNode.TYPE, "=");
         arithmetic(FloatEqualsNode.TYPE, "eq");
         n2o(IntegerTestNode.TYPE, "=");
+        n2o(ObjectEqualsNode.TYPE, "=");
+        n2o(PointerEqualsNode.TYPE, "=");
         n2o(IntegerRemNode.TYPE, "bvurem");
         n2o(IntegerDivNode.TYPE, "bvsdiv");
         n2o(UnsignedRightShiftNode.TYPE, "bvlshr");
@@ -158,6 +159,8 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         n2o(new OperatorDescription<>(IsNullNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s (bvsub %s %s)))", getNodeString(n), getNodeString(n),
                         getNodeString(n))));
         n2o(new OperatorDescription<>(AMD64AddressNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> null));
+        n2o(new OperatorDescription<>(PiArrayNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> null));
+        n2o(new OperatorDescription<>(PointerCastNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.getInput()))));
         n2o(new OperatorDescription<>(PiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.object()))));
         n2o(new OperatorDescription<>(FixedValueAnchorNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.object()))));
         n2o(new OperatorDescription<>(ReadNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> null));
@@ -306,30 +309,34 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
 
     @Override
     protected void run(StructuredGraph graph, LowTierContext context) {
-        String prologue = "(set-logic QF_BV)\n" + DECLARE;
-        StringBuilder declarations = new StringBuilder();
-        StringBuilder definitions = new StringBuilder();
-        List<ValueNode> definedNodes = new ArrayList<>();
-        for (Node n : graph.getNodes()) {
-            @SuppressWarnings("unchecked")
-            OperatorDescription<ValueNode> d = (OperatorDescription<ValueNode>) n2o.get(n.getNodeClass());
-            if (d == null && isCaptured(n)) {
-                d = defaultDescription;
+        try {
+            String prologue = "(set-logic QF_BV)\n" + DECLARE;
+            StringBuilder declarations = new StringBuilder();
+            StringBuilder definitions = new StringBuilder();
+            List<ValueNode> definedNodes = new ArrayList<>();
+            for (Node n : graph.getNodes()) {
+                @SuppressWarnings("unchecked")
+                OperatorDescription<ValueNode> d = (OperatorDescription<ValueNode>) n2o.get(n.getNodeClass());
+                if (d == null && isCaptured(n)) {
+                    d = defaultDescription;
+                }
+                if (d != null) {
+                    appendCrNonNull(declarations, d.getDeclaration().apply((ValueNode) n));
+                    appendCrNonNull(definitions, d.getDefinition().apply((ValueNode) n));
+                    definedNodes.add((ValueNode) n);
+                }
             }
-            if (d != null) {
-                appendCrNonNull(declarations, d.getDeclaration().apply((ValueNode) n));
-                appendCrNonNull(definitions, d.getDefinition().apply((ValueNode) n));
-                definedNodes.add((ValueNode) n);
+            SMT smt = new SMT(prologue + declarations + definitions);
+            Function<String, Node> s2n = s -> graph.getNode(Integer.parseInt(s.substring(1)));
+            smt.addCheck(new ConstantFoldingCheck(s2n, n -> n instanceof ConstantNode));
+            smt.addCheck(new EquivalenceCheck(n -> s2n.apply(n).toString()));
+            if (!DumpSMTDir.hasDefaultValue()) {
+                dumpSMT(graph, prologue, declarations, definitions);
             }
+            check(smt);
+        } catch (Exception e) {
+            TTY.println("Error: " + e.getMessage());
         }
-        SMT smt = new SMT(prologue + declarations + definitions);
-        Function<String, Node> s2n = s -> graph.getNode(Integer.parseInt(s.substring(1)));
-        smt.addCheck(new ConstantFoldingCheck(s2n, n -> n instanceof ConstantNode));
-        smt.addCheck(new EquivalenceCheck(n -> s2n.apply(n).toString()));
-        if (!DumpSMTDir.hasDefaultValue()) {
-            dumpSMT(graph, prologue, declarations, definitions);
-        }
-        check(smt);
     }
 
     private static boolean isCaptured(Node n) {
