@@ -7,6 +7,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -24,6 +25,7 @@ import at.sanzinger.boolector.SMT;
 import at.sanzinger.graal.verify.gen.OperatorDescription;
 
 import com.oracle.graal.compiler.common.type.AbstractPointerStamp;
+import com.oracle.graal.compiler.common.type.IllegalStamp;
 import com.oracle.graal.compiler.common.type.IntegerStamp;
 import com.oracle.graal.compiler.common.type.ObjectStamp;
 import com.oracle.graal.compiler.common.type.PrimitiveStamp;
@@ -32,16 +34,11 @@ import com.oracle.graal.compiler.common.type.VoidStamp;
 import com.oracle.graal.debug.TTY;
 import com.oracle.graal.graph.Node;
 import com.oracle.graal.graph.NodeClass;
-import com.oracle.graal.graph.iterators.NodeIterable;
-import com.oracle.graal.nodes.AbstractMergeNode;
 import com.oracle.graal.nodes.ConstantNode;
 import com.oracle.graal.nodes.IfNode;
 import com.oracle.graal.nodes.InvokeNode;
 import com.oracle.graal.nodes.LogicNode;
-import com.oracle.graal.nodes.LoopBeginNode;
-import com.oracle.graal.nodes.MergeNode;
 import com.oracle.graal.nodes.ParameterNode;
-import com.oracle.graal.nodes.PhiNode;
 import com.oracle.graal.nodes.StructuredGraph;
 import com.oracle.graal.nodes.ValueNode;
 import com.oracle.graal.nodes.ValuePhiNode;
@@ -118,7 +115,6 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         n2o(UnsignedRightShiftNode.TYPE, "bvlshr");
         n2o(LeftShiftNode.TYPE, "bvshl");
         n2o(RightShiftNode.TYPE, "bvashr");
-        n2o(new OperatorDescription<>(PhiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::phiDefinition));
         n2o(new OperatorDescription<>(ValuePhiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::phiDefinition));
         n2o(new OperatorDescription<>(ConstantNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::defineConstant));
     }
@@ -135,12 +131,14 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             sb.append(" (");
             sb.append(opName);
             for (Node i : n.inputs()) {
-                int iBits = getBits((ValueNode) i);
-                sb.append(' ');
-                if (iBits < bits) {
-                    sb.append(String.format("((_ sign_extend %d) %s)", bits - iBits, getNodeString(i)));
-                } else {
-                    sb.append(getNodeString(i));
+                if (i instanceof ValueNode) {
+                    int iBits = getBits((ValueNode) i);
+                    sb.append(' ');
+                    if (iBits < bits) {
+                        sb.append(String.format("((_ sign_extend %d) %s)", bits - iBits, getNodeString(i)));
+                    } else {
+                        sb.append(getNodeString(i));
+                    }
                 }
             }
             sb.append(")))");
@@ -148,76 +146,14 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         return sb.toString();
     }
 
-    private static String phiDefinition(PhiNode n) {
-        StringBuilder sb = new StringBuilder();
-        StringBuilder closing = new StringBuilder();
-        sb.append("(assert (= ");
-        sb.append(getNodeString(n));
-        sb.append(" ");
-        int i = 0;
-        AbstractMergeNode merge = n.merge();
-        Iterable<? extends Node> pred = null;
-        int count = 0;
-        if (merge instanceof MergeNode) {
-            NodeIterable<? extends Node> predNodeIter = n.merge().cfgPredecessors();
-            pred = predNodeIter;
-            count = predNodeIter.count();
-        } else if (merge instanceof LoopBeginNode) {
-            return null;
-        }
-        assert count >= 2 : "Count: " + count + " n: " + n;
-        if (allCaptured(pred)) {
-            for (Node en : pred) {
-                IfSuccessorPair ifNodeSucc = findDominatingIfNode(en);
-                ValueNode ifNode = ifNodeSucc.ifNode.condition();
-                sb.append("(");
-                if (i + 1 < count) {
-                    sb.append("ite ");
-                    sb.append("(");
-                    if (!ifNodeSucc.trueSuccessor) {
-                        sb.append("not ");
-                    }
-                    sb.append(getNodeString(ifNode));
-                    sb.append(") ");
-                }
-                sb.append(' ');
-                sb.append(getNodeString(n.valueAt(i)));
-                sb.append(' ');
-                closing.append(")");
-                i++;
-            }
-            sb.append(closing);
-            sb.append("))");
-            return sb.toString();
+    private static String phiDefinition(ValuePhiNode n) {
+        PhiConditionResolver r = new PhiConditionResolver(n);
+        String res = r.resolve();
+        if (res != null) {
+            return String.format("(assert (= %s %s))", getNodeString(n), r.resolve());
         } else {
             return null;
         }
-    }
-
-    private static IfSuccessorPair findDominatingIfNode(Node fn) {
-        Node n = fn;
-        Node prev = null;
-        while (!(n instanceof IfNode)) {
-            prev = n;
-            n = n.predecessor();
-            if (n == null) {
-                return null;
-            }
-        }
-        IfNode ifNode = (IfNode) n;
-        return new IfSuccessorPair(ifNode, ifNode.trueSuccessor().equals(prev));
-    }
-
-    private static class IfSuccessorPair {
-        public final IfNode ifNode;
-        public final boolean trueSuccessor;
-
-        public IfSuccessorPair(IfNode ifNode, boolean trueSuccessor) {
-            super();
-            this.ifNode = ifNode;
-            this.trueSuccessor = trueSuccessor;
-        }
-
     }
 
     private static String defaultDeclaration(ValueNode n) {
@@ -231,7 +167,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         } else if (stamp instanceof PrimitiveStamp) {
             PrimitiveStamp ps = (PrimitiveStamp) n.stamp();
             return ps.getBits();
-        } else if (stamp instanceof ObjectStamp || stamp instanceof AbstractPointerStamp) {
+        } else if (stamp instanceof ObjectStamp || stamp instanceof AbstractPointerStamp || stamp instanceof IllegalStamp) {
             return 64;
         } else if (stamp instanceof VoidStamp) {
             return 0;
@@ -257,7 +193,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         int bitLength = 0;
         long bits = 0;
         if (c instanceof PrimitiveConstant) {
-            bitLength = ((PrimitiveConstant) c).getJavaKind().getBitCount();
+            bitLength = getBits(n); // ((PrimitiveConstant) c).getJavaKind().getBitCount();
             PrimitiveConstant pc = (PrimitiveConstant) c;
             switch (pc.getJavaKind()) {
                 case Long:
@@ -280,6 +216,8 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
                 case Double:
                     bits = Double.doubleToRawLongBits(pc.asDouble());
                     break;
+                case Illegal:
+                    return null;
                 default:
                     throw JVMCIError.shouldNotReachHere("Unknown PrimitiveConstant " + pc);
             }
@@ -318,15 +256,6 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             dumpSMT(graph, prologue, declarations, definitions);
         }
         check(smt);
-    }
-
-    private static boolean allCaptured(Iterable<? extends Node> nodes) {
-        for (Node n : nodes) {
-            if (!isCaptured(n)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private static boolean isCaptured(Node n) {
