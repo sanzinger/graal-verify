@@ -75,6 +75,7 @@ import com.oracle.graal.nodes.calc.RemNode;
 import com.oracle.graal.nodes.calc.RightShiftNode;
 import com.oracle.graal.nodes.calc.SubNode;
 import com.oracle.graal.nodes.calc.UnsignedRightShiftNode;
+import com.oracle.graal.nodes.extended.FixedValueAnchorNode;
 import com.oracle.graal.nodes.extended.ForeignCallNode;
 import com.oracle.graal.nodes.memory.FloatingReadNode;
 import com.oracle.graal.nodes.memory.ReadNode;
@@ -158,6 +159,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
                         getNodeString(n))));
         n2o(new OperatorDescription<>(AMD64AddressNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> null));
         n2o(new OperatorDescription<>(PiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.object()))));
+        n2o(new OperatorDescription<>(FixedValueAnchorNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.object()))));
         n2o(new OperatorDescription<>(ReadNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> null));
         n2o(new OperatorDescription<>(FloatingReadNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> null));
         n2o(new OperatorDescription<>(WordCastNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.getInput()))));
