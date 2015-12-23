@@ -1,5 +1,6 @@
 package at.sanzinger.boolector;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -18,12 +19,14 @@ public class SMTModel {
     }
 
     public Definition[] getDefinitions() {
-        Definition[] defs = new Definition[lines.size() - 2];
-        for (int i = 1; i < lines.size() - 1; i++) {
-            String defLine = lines.get(i);
-            defs[i - 1] = definitionFromLine(defLine);
+        List<Definition> defs = new ArrayList<>(lines.size());
+        for (String defLine : lines) {
+            Definition def = definitionFromLine(defLine);
+            if (def != null) {
+                defs.add(def);
+            }
         }
-        return defs;
+        return defs.toArray(new Definition[0]);
     }
 
     private static Definition definitionFromLine(String line) {

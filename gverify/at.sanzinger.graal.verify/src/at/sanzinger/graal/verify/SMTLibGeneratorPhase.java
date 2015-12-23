@@ -7,13 +7,13 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import jdk.vm.ci.common.JVMCIError;
 import jdk.vm.ci.meta.Constant;
+import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.PrimitiveConstant;
 import jdk.vm.ci.options.Option;
 import jdk.vm.ci.options.OptionType;
@@ -25,6 +25,7 @@ import at.sanzinger.boolector.SMT;
 import at.sanzinger.graal.verify.gen.OperatorDescription;
 
 import com.oracle.graal.compiler.common.type.AbstractPointerStamp;
+import com.oracle.graal.compiler.common.type.FloatStamp;
 import com.oracle.graal.compiler.common.type.IllegalStamp;
 import com.oracle.graal.compiler.common.type.IntegerStamp;
 import com.oracle.graal.compiler.common.type.ObjectStamp;
@@ -35,7 +36,6 @@ import com.oracle.graal.debug.TTY;
 import com.oracle.graal.graph.Node;
 import com.oracle.graal.graph.NodeClass;
 import com.oracle.graal.nodes.ConstantNode;
-import com.oracle.graal.nodes.IfNode;
 import com.oracle.graal.nodes.InvokeNode;
 import com.oracle.graal.nodes.LogicNode;
 import com.oracle.graal.nodes.ParameterNode;
@@ -81,9 +81,23 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     private static Boolector boolector;
     private static final AtomicInteger unknownCounter = new AtomicInteger();
     private static final OperatorDescription<ValueNode> defaultDescription = new OperatorDescription<>(ValueNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, n -> null);
+    private static final String DECLARE = declare();
 
     private static <T extends ValueNode> void n2o(NodeClass<T> nodeClass, String opName) {
         n2o.put(nodeClass, new OperatorDescription<>(nodeClass, (n) -> defaultDeclaration(n), (n) -> defaultDefinition(opName, n)));
+    }
+
+    private static <T extends ValueNode> void arithmetic(NodeClass<T> nodeClass, String opName) {
+        n2o.put(nodeClass, new OperatorDescription<>(nodeClass, (n) -> defaultDeclaration(n), (n) -> defaultArithmeticDefinition(n, opName)));
+    }
+
+    private static String declare() {
+        StringBuilder sb = new StringBuilder();
+        for (String i : new String[]{"add", "sub", "mul", "sdiv"}) {
+            sb.append(String.format("(declare-fun f%s ( (_ BitVec 32) (_ BitVec 32) ) (_ BitVec 32) )\n", i));
+            sb.append(String.format("(declare-fun d%s ( (_ BitVec 64) (_ BitVec 64) ) (_ BitVec 64) )\n", i));
+        }
+        return sb.toString();
     }
 
     private static <T extends ValueNode> void n2o(OperatorDescription<T> d) {
@@ -95,10 +109,10 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         n2o(AndNode.TYPE, "bvand");
         n2o(OrNode.TYPE, "bvor");
         n2o(NegateNode.TYPE, "bvneg");
-        n2o(AddNode.TYPE, "bvadd");
-        n2o(SubNode.TYPE, "bvsub");
-        n2o(MulNode.TYPE, "bvmul");
-        n2o(DivNode.TYPE, "bvsdiv");
+        arithmetic(AddNode.TYPE, "add");
+        arithmetic(SubNode.TYPE, "sub");
+        arithmetic(MulNode.TYPE, "mul");
+        arithmetic(DivNode.TYPE, "sdiv");
         n2o(RemNode.TYPE, "bvsrem");
         n2o(ParameterNode.TYPE, null);
         n2o(InvokeNode.TYPE, null);
@@ -117,6 +131,25 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         n2o(RightShiftNode.TYPE, "bvashr");
         n2o(new OperatorDescription<>(ValuePhiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::phiDefinition));
         n2o(new OperatorDescription<>(ConstantNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::defineConstant));
+    }
+
+    private static String defaultArithmeticDefinition(ValueNode n, String op) {
+        String prefix;
+        if (n.stamp() instanceof IntegerStamp) {
+            prefix = "bv";
+        } else if (n.stamp() instanceof FloatStamp) {
+            FloatStamp fs = (FloatStamp) n.stamp();
+            if (fs.getBits() == JavaKind.Float.getBitCount()) {
+                prefix = "f";
+            } else if (fs.getBits() == JavaKind.Double.getBitCount()) {
+                prefix = "d";
+            } else {
+                throw JVMCIError.shouldNotReachHere();
+            }
+        } else {
+            throw JVMCIError.shouldNotReachHere(n.stamp().toString());
+        }
+        return defaultDefinition(prefix + op, n);
     }
 
     private static String defaultDefinition(String opName, ValueNode n) {
@@ -232,7 +265,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
 
     @Override
     protected void run(StructuredGraph graph, LowTierContext context) {
-        String prologue = "(set-logic QF_BV)";
+        String prologue = "(set-logic QF_BV)\n" + DECLARE;
         StringBuilder declarations = new StringBuilder();
         StringBuilder definitions = new StringBuilder();
         List<ValueNode> definedNodes = new ArrayList<>();

@@ -1,7 +1,6 @@
 package at.sanzinger.boolector.test;
 
 import static java.lang.System.currentTimeMillis;
-import static java.lang.System.lineSeparator;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -84,7 +83,8 @@ public class BoolectorTest {
                 i.define("(set-logic UNKNOWN)");
                 i.checkSat();
             } catch (Exception e) {
-                assertEquals("boolector: <stdin>:1:12: expected logic at 'UNKNOWN'" + lineSeparator(), e.getMessage());
+                System.out.println(e.getMessage());
+                assertEquals("Process died, stdout:  stderr: boolector: <stdin>:1:12: expected logic at 'UNKNOWN'", e.getMessage());
             }
         }
     }
@@ -116,6 +116,23 @@ public class BoolectorTest {
             assertEquals(1, d.length);
             assertEquals("n1", d[0].getName());
             assertEquals("#b1", d[0].getValue());
+        }
+    }
+
+    @Test
+    public void testComplexModel() {
+        try (BoolectorInstance i = btor.newInstance()) {
+            // @formatter:off
+            i.define("(set-logic QF_BV)\n" +
+                            "(declare-fun n1 () Bool)\n" +
+                            "(declare-fun cadd ( (_ BitVec 1) (_ BitVec 1) ) (_ BitVec 1) )\n" +
+                            "(assert (= (cadd n1 n1) #b1))");
+            // @formatter:on
+            SMTModel model = i.getModel();
+            Definition[] d = model.getDefinitions();
+            assertEquals(1, d.length);
+            assertEquals("n1", d[0].getName());
+            assertEquals("#b0", d[0].getValue());
         }
     }
 
