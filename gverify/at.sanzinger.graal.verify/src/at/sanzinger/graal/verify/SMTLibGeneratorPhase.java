@@ -11,19 +11,6 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
-import jdk.vm.ci.common.JVMCIError;
-import jdk.vm.ci.meta.Constant;
-import jdk.vm.ci.meta.JavaKind;
-import jdk.vm.ci.meta.PrimitiveConstant;
-import jdk.vm.ci.options.Option;
-import jdk.vm.ci.options.OptionType;
-import jdk.vm.ci.options.OptionValue;
-import at.sanzinger.boolector.Boolector;
-import at.sanzinger.boolector.BoolectorInstance;
-import at.sanzinger.boolector.CheckResult;
-import at.sanzinger.boolector.SMT;
-import at.sanzinger.graal.verify.gen.OperatorDescription;
-
 import com.oracle.graal.compiler.amd64.AMD64AddressNode;
 import com.oracle.graal.compiler.common.type.AbstractPointerStamp;
 import com.oracle.graal.compiler.common.type.FloatStamp;
@@ -78,19 +65,32 @@ import com.oracle.graal.nodes.extended.FixedValueAnchorNode;
 import com.oracle.graal.nodes.extended.ForeignCallNode;
 import com.oracle.graal.nodes.memory.FloatingReadNode;
 import com.oracle.graal.nodes.memory.ReadNode;
+import com.oracle.graal.options.Option;
+import com.oracle.graal.options.OptionType;
+import com.oracle.graal.options.OptionValue;
 import com.oracle.graal.phases.BasePhase;
 import com.oracle.graal.phases.tiers.LowTierContext;
 import com.oracle.graal.word.nodes.WordCastNode;
+
+import at.sanzinger.boolector.Boolector;
+import at.sanzinger.boolector.BoolectorInstance;
+import at.sanzinger.boolector.CheckResult;
+import at.sanzinger.boolector.SMT;
+import at.sanzinger.graal.verify.gen.OperatorDescription;
+import jdk.vm.ci.common.JVMCIError;
+import jdk.vm.ci.meta.Constant;
+import jdk.vm.ci.meta.JavaKind;
+import jdk.vm.ci.meta.PrimitiveConstant;
 
 public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     private static final IdentityHashMap<NodeClass<? extends ValueNode>, OperatorDescription<?>> n2o = new IdentityHashMap<>();
 
     // @formatter:off
     @Option(help = "Dump SMT-V2 representation of the graphs into this directory", type=OptionType.User)
-    private static final OptionValue<String> DumpSMTDir = new OptionValue<>(null);
+    static final OptionValue<String> DumpSMTDir = new OptionValue<>(null);
 
     @Option(help = "Boolector binary", type=OptionType.User)
-    private static final OptionValue<String> Btor = new OptionValue<>(null);
+    static final OptionValue<String> Btor = new OptionValue<>(null);
     // @formatter:on
 
     private static Boolector boolector;

@@ -15,7 +15,7 @@ suite = {
     "suites": [
             {
                 "name" : "graal",
-                "version" : "a2bf47587cc1241cc8833906c12d9004e05a0a15",
+                "version" : "964f28c04d7bbae2b7dfad8ed7003140d92b84ba",
                 "urls" : [
                     {"url" : "http://lafo.ssw.uni-linz.ac.at/hg/graal-compiler", "kind" : "hg"},
                 ]
@@ -53,8 +53,10 @@ suite = {
 	"at.sanzinger.boolector",
       ],
       "annotationProcessors" : [
-        "jvmci:JVMCI_OPTIONS_PROCESSOR",
-        "jvmci:JVMCI_SERVICE_PROCESSOR",
+        "graal:GRAAL_NODEINFO_PROCESSOR",
+        "graal:GRAAL_REPLACEMENTS_VERIFIER",
+        "graal:GRAAL_OPTIONS_PROCESSOR",
+        "graal:GRAAL_SERVICEPROVIDER_PROCESSOR",
       ],
     },
 
@@ -85,6 +87,9 @@ suite = {
       "subDir" : "gverify",
       "dependencies" : [
         "at.sanzinger.graal.verify",
+      ],
+      "distDependencies" : [
+        "graal:GRAAL_HOTSPOT",
       ],
     },
   },

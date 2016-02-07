@@ -1,3 +1,4 @@
-from mx_jvmci import JvmciJDKDeployedDist, jdkDeployedDists
+from mx_jvmci import jdkDeployedDists
+from mx_graal_8 import GraalJDKDeployedDist
 
-jdkDeployedDists += [JvmciJDKDeployedDist('GRAAL_VERIFY', compilers=["graal-verify"])]
+jdkDeployedDists += [GraalJDKDeployedDist('GRAAL_VERIFY', compilers=["graal-verify"])]

@@ -5,9 +5,9 @@ import com.oracle.graal.hotspot.DefaultHotSpotGraalCompilerFactory;
 import com.oracle.graal.phases.PhaseSuite;
 import com.oracle.graal.phases.tiers.CompilerConfiguration;
 import com.oracle.graal.phases.tiers.LowTierContext;
+import com.oracle.graal.serviceprovider.ServiceProvider;
 
 import jdk.vm.ci.runtime.JVMCICompilerFactory;
-import jdk.vm.ci.service.ServiceProvider;
 
 @ServiceProvider(JVMCICompilerFactory.class)
 public class VerifyingCompilerConfiguration extends DefaultHotSpotGraalCompilerFactory {
