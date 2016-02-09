@@ -162,8 +162,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
 
         n2o(CompressionNode.TYPE, "uncompress");
 
-        n2o(new OperatorDescription<>(IsNullNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s (bvsub %s %s)))", getNodeString(n), getNodeString(n),
-                        getNodeString(n))));
+        n2o(new OperatorDescription<>(IsNullNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::isNullDefinition));
         n2o(new OperatorDescription<>(AMD64AddressNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> null));
         n2o(new OperatorDescription<>(PiArrayNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> null));
         n2o(new OperatorDescription<>(PointerCastNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.getInput()))));
@@ -227,6 +226,11 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             sb.append(")))");
         }
         return sb.toString();
+    }
+
+    private static String isNullDefinition(IsNullNode node) {
+        ValueNode value = node.getValue();
+        return String.format("(assert (= %s (= %s %s)))", getNodeString(node), makeSMTConstant(0, getBits(value)), getNodeString(value));
     }
 
     private static String phiDefinition(ValuePhiNode n) {
@@ -307,10 +311,14 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         }
         if (bitLength > 0) {
             long value = bitLength < 64 ? bits & ((1l << bitLength) - 1) : bits;
-            return String.format("(assert (= %s #x%0" + (bitLength / 4) + "x))", getNodeString(n), value);
+            return String.format("(assert (= %s %s))", getNodeString(n), makeSMTConstant(value, bitLength));
         } else {
             return null;
         }
+    }
+
+    private static String makeSMTConstant(long constant, int bits) {
+        return String.format("#x%0" + (bits / 4) + "x", constant);
     }
 
     @Override
