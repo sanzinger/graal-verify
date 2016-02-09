@@ -5,6 +5,11 @@ import static com.oracle.graal.debug.TTY.println;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -70,6 +75,7 @@ import com.oracle.graal.options.OptionType;
 import com.oracle.graal.options.OptionValue;
 import com.oracle.graal.phases.BasePhase;
 import com.oracle.graal.phases.tiers.LowTierContext;
+import com.oracle.graal.printer.BinaryGraphPrinter;
 import com.oracle.graal.word.nodes.WordCastNode;
 
 import at.sanzinger.boolector.Boolector;
@@ -333,9 +339,36 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             if (!DumpSMTDir.hasDefaultValue()) {
                 dumpSMT(graph, prologue, declarations, definitions);
             }
-            check(smt);
+            CheckResult[] results = check(smt);
+            report(graph, results);
         } catch (Exception e) {
             TTY.println("Error: " + e.getMessage());
+        }
+    }
+
+    private static void report(StructuredGraph graph, CheckResult[] results) {
+        ArrayList<CheckResult> errors = new ArrayList<>();
+        for (int i = 0; i < results.length; i++) {
+            CheckResult result = results[i];
+            if (result.getState().equals(CheckResult.State.ERROR) || result.getState().equals(CheckResult.State.SUSPICIOUS)) {
+                println("\n" + result.toString() + "\n");
+                errors.add(result);
+            }
+        }
+        if (errors.size() > 0) {
+            String fileName = getFileNameForGraph(graph) + ".bgv";
+            Path dumpPath = Paths.get(DumpSMTDir.hasDefaultValue() ? "." : DumpSMTDir.getValue(), fileName);
+            try {
+
+                try (BinaryGraphPrinter printer = new BinaryGraphPrinter(
+                                FileChannel.open(dumpPath, StandardOpenOption.WRITE, Files.exists(dumpPath) ? StandardOpenOption.TRUNCATE_EXISTING : StandardOpenOption.CREATE_NEW))) {
+                    printer.beginGroup(getFileNameForGraph(graph), "", null, -1);
+                    printer.print(graph, errors.toString());
+                    printer.endGroup();
+                }
+            } catch (IOException e) {
+                throw new JVMCIError(e);
+            }
         }
     }
 
@@ -347,12 +380,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     }
 
     private static void dumpSMT(StructuredGraph graph, String prologue, StringBuilder declarations, StringBuilder definitions) {
-        String filename;
-        if (graph.method() == null) {
-            filename = String.format("%s_%d.smt2", graph.toString(), unknownCounter.incrementAndGet());
-        } else {
-            filename = graph.method().format("%h_%n_(%p).smt2").replace(' ', '_').replace('/', '_');
-        }
+        String filename = getFileNameForGraph(graph) + ".smt2";
         File outfile = new File(DumpSMTDir.getValue(), filename);
         try {
             println("Write SMT model of %s to file %s", graph.method(), outfile);
@@ -362,18 +390,22 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         }
     }
 
-    private static void check(SMT smt) {
+    private static String getFileNameForGraph(StructuredGraph graph) {
+        if (graph.method() == null) {
+            return String.format("%s_%d", graph.toString(), unknownCounter.incrementAndGet());
+        } else {
+            return graph.method().format("%h_%n_(%p)").replace(' ', '_').replace('/', '_');
+        }
+    }
+
+    private static CheckResult[] check(SMT smt) {
         Boolector btor = getBoolector();
         if (btor != null) {
             try (BoolectorInstance bi = btor.newInstance()) {
-                CheckResult[] results = bi.execute(smt);
-                for (int i = 0; i < results.length; i++) {
-                    CheckResult result = results[i];
-                    if (result.getState().equals(CheckResult.State.ERROR) || result.getState().equals(CheckResult.State.SUSPICIOUS)) {
-                        println("\n" + result.toString() + "\n");
-                    }
-                }
+                return bi.execute(smt);
             }
+        } else {
+            return new CheckResult[0];
         }
     }
 
