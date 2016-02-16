@@ -25,12 +25,16 @@ suite = {
 
 
   "libraries" : {
+    "gson" : {
+      "urls" : [
+        "http://central.maven.org/maven2/com/google/code/gson/gson/2.6.1/gson-2.6.1.jar",
+      ],
+      "sha1" : "b9d63507329a7178e026fc334f87587ee5070ac5"
+    }
   },
 
 
   "projects" : {
-
-
     "at.sanzinger.graal.verify.test" : {
       "subDir" : "gverify",
       "sourceDirs" : ["src"],
@@ -51,6 +55,7 @@ suite = {
 	"graal-core:GRAAL_COMPILER",
 	"graal-core:GRAAL_HOTSPOT",
 	"at.sanzinger.boolector",
+        "gson",
       ],
       "annotationProcessors" : [
         "graal-core:GRAAL_NODEINFO_PROCESSOR",

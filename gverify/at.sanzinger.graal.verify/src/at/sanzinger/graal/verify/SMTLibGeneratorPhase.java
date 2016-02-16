@@ -3,6 +3,7 @@ package at.sanzinger.graal.verify;
 import static com.oracle.graal.debug.TTY.println;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -10,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -82,6 +84,7 @@ import at.sanzinger.boolector.Boolector;
 import at.sanzinger.boolector.BoolectorInstance;
 import at.sanzinger.boolector.CheckResult;
 import at.sanzinger.boolector.SMT;
+import at.sanzinger.boolector.dump.JSONDumper;
 import at.sanzinger.graal.verify.gen.OperatorDescription;
 import jdk.vm.ci.common.JVMCIError;
 import jdk.vm.ci.meta.Constant;
@@ -90,6 +93,9 @@ import jdk.vm.ci.meta.PrimitiveConstant;
 
 public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
     private static final IdentityHashMap<NodeClass<? extends ValueNode>, OperatorDescription<?>> n2o = new IdentityHashMap<>();
+    private static final SimpleDateFormat logfileDateFormat = new SimpleDateFormat("yyyy-MM-dd-hhmmss");
+    private static final String logfileNamePattern = "smt-log-%s.json";
+    private static JSONDumper dumper;
 
     // @formatter:off
     @Option(help = "Dump SMT-V2 representation of the graphs into this directory", type=OptionType.User)
@@ -321,6 +327,29 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         return String.format("#x%0" + (bits / 4) + "x", constant);
     }
 
+    private static JSONDumper getDumper() {
+        if (dumper == null) {
+            synchronized (SMTLibGeneratorPhase.class) {
+                if (dumper == null) {
+                    try {
+                        String filename = String.format(logfileNamePattern, logfileDateFormat.format(new java.util.Date()));
+                        FileOutputStream fos = new FileOutputStream(filename);
+                        dumper = new JSONDumper(fos);
+                        Runtime.getRuntime().addShutdownHook(new Thread() {
+                            @Override
+                            public void run() {
+                                dumper.close();
+                            }
+                        });
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            }
+        }
+        return dumper;
+    }
+
     @Override
     protected void run(StructuredGraph graph, LowTierContext context) {
         try {
@@ -350,11 +379,12 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             CheckResult[] results = check(smt);
             report(graph, results);
         } catch (Exception e) {
-            TTY.println("Error: " + e.getMessage());
+            throw new RuntimeException(e);
         }
     }
 
     private static void report(StructuredGraph graph, CheckResult[] results) {
+        getDumper().dump(graph.toString(), results);
         ArrayList<CheckResult> errors = new ArrayList<>();
         for (int i = 0; i < results.length; i++) {
             CheckResult result = results[i];
