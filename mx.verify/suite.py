@@ -14,10 +14,10 @@ suite = {
   "imports" : {
     "suites": [
             {
-                "name" : "graal",
-                "version" : "964f28c04d7bbae2b7dfad8ed7003140d92b84ba",
+                "name" : "graal-core",
+                "version" : "1f226be60fffa2263b8084923b3c59d1e708e0f6",
                 "urls" : [
-                    {"url" : "http://lafo.ssw.uni-linz.ac.at/hg/graal-compiler", "kind" : "hg"},
+                    {"url" : "https://github.com/graalvm/graal-core", "kind" : "git"},
                 ]
             },
     ]
@@ -36,7 +36,7 @@ suite = {
       "sourceDirs" : ["src"],
       "javaCompliance" : "1.8",
       "dependencies" : [
-        "graal:GRAAL_TEST",
+        "graal-core:GRAAL_TEST",
 	"at.sanzinger.graal.verify",
       ],
       "workingSets" : "Verification",
@@ -48,15 +48,15 @@ suite = {
       "javaCompliance" : "1.8",
       "workingSets" : "Verification",
       "dependencies" : [
-	"graal:GRAAL_COMPILER",
-	"graal:GRAAL_HOTSPOT",
+	"graal-core:GRAAL_COMPILER",
+	"graal-core:GRAAL_HOTSPOT",
 	"at.sanzinger.boolector",
       ],
       "annotationProcessors" : [
-        "graal:GRAAL_NODEINFO_PROCESSOR",
-        "graal:GRAAL_REPLACEMENTS_VERIFIER",
-        "graal:GRAAL_OPTIONS_PROCESSOR",
-        "graal:GRAAL_SERVICEPROVIDER_PROCESSOR",
+        "graal-core:GRAAL_NODEINFO_PROCESSOR",
+        "graal-core:GRAAL_REPLACEMENTS_VERIFIER",
+        "graal-core:GRAAL_OPTIONS_PROCESSOR",
+        "graal-core:GRAAL_SERVICEPROVIDER_PROCESSOR",
       ],
     },
 
@@ -89,7 +89,7 @@ suite = {
         "at.sanzinger.graal.verify",
       ],
       "distDependencies" : [
-        "graal:GRAAL_HOTSPOT",
+        "graal-core:GRAAL_HOTSPOT",
       ],
     },
   },
