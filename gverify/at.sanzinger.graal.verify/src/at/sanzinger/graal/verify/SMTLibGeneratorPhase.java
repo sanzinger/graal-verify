@@ -14,9 +14,11 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -367,7 +369,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             StringBuilder declarations = new StringBuilder();
             StringBuilder definitions = new StringBuilder();
             List<ValueNode> definedNodes = new ArrayList<>();
-            NodeMap<Node> knownEq = new NodeMap<>(graph);
+            EquivalenceSet knownEq = new EquivalenceSet(graph);
             for (Node n : graph.getNodes()) {
                 @SuppressWarnings("unchecked")
                 OperatorDescription<ValueNode> d = (OperatorDescription<ValueNode>) n2o.get(n.getNodeClass());
@@ -379,9 +381,8 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
                     appendCrNonNull(definitions, d.getDefinition().apply((ValueNode) n));
                     definedNodes.add((ValueNode) n);
                     if ((d.getFlags() & FLAG_EQUIVALENT) != 0) {
-                        for (Node usage : n.inputs()) {
-                            knownEq.set(n, usage);
-                            knownEq.set(usage, n);
+                        for (Node input : n.inputs()) {
+                            knownEq.setEquivalent(n, input);
                         }
                     }
                 }
@@ -391,9 +392,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             smt.addCheck(new ConstantFoldingCheck(s2n, n -> n instanceof ConstantNode));
             BiFunction<String, String, Boolean> isEqKnown = new BiFunction<String, String, Boolean>() {
                 public Boolean apply(String t, String u) {
-                    Node tn = s2n.apply(t);
-                    Node tu = s2n.apply(u);
-                    return knownEq.containsKey(tn) && knownEq.get(tn).equals(tu);
+                    return knownEq.isEquivalent(s2n.apply(t), s2n.apply(u));
                 }
             };
             smt.addCheck(new EquivalenceCheck(isEqKnown, n -> s2n.apply(n).toString()));
