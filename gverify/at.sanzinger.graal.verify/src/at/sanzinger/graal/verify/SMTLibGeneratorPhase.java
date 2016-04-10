@@ -1,5 +1,6 @@
 package at.sanzinger.graal.verify;
 
+import static at.sanzinger.graal.verify.gen.OperatorDescription.FLAG_EQUIVALENT;
 import static com.oracle.graal.debug.TTY.println;
 
 import java.io.File;
@@ -15,7 +16,9 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import com.oracle.graal.compiler.amd64.AMD64AddressNode;
@@ -28,9 +31,12 @@ import com.oracle.graal.compiler.common.type.PrimitiveStamp;
 import com.oracle.graal.compiler.common.type.Stamp;
 import com.oracle.graal.compiler.common.type.VoidStamp;
 import com.oracle.graal.debug.TTY;
+import com.oracle.graal.graph.DefaultNodeCollectionsProvider;
 import com.oracle.graal.graph.Node;
 import com.oracle.graal.graph.NodeClass;
 import com.oracle.graal.graph.NodeClassIterable;
+import com.oracle.graal.graph.NodeCollectionsProvider;
+import com.oracle.graal.graph.NodeMap;
 import com.oracle.graal.hotspot.nodes.CompressionNode;
 import com.oracle.graal.hotspot.word.PointerCastNode;
 import com.oracle.graal.nodes.ConstantNode;
@@ -171,12 +177,16 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
         n2o(new OperatorDescription<>(IsNullNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::isNullDefinition));
         n2o(new OperatorDescription<>(AMD64AddressNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> null));
         n2o(new OperatorDescription<>(PiArrayNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> null));
-        n2o(new OperatorDescription<>(PointerCastNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.getInput()))));
-        n2o(new OperatorDescription<>(PiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.object()))));
-        n2o(new OperatorDescription<>(FixedValueAnchorNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.object()))));
+        n2o(new OperatorDescription<>(PointerCastNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.getInput())),
+                        FLAG_EQUIVALENT));
+        n2o(new OperatorDescription<>(PiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.object())),
+                        FLAG_EQUIVALENT));
+        n2o(new OperatorDescription<>(FixedValueAnchorNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.object())),
+                        FLAG_EQUIVALENT));
         n2o(new OperatorDescription<>(ReadNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> null));
         n2o(new OperatorDescription<>(FloatingReadNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> null));
-        n2o(new OperatorDescription<>(WordCastNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.getInput()))));
+        n2o(new OperatorDescription<>(WordCastNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, (n) -> String.format("(assert (= %s %s))", getNodeString(n), getNodeString(n.getInput())),
+                        FLAG_EQUIVALENT));
         n2o(new OperatorDescription<>(ValuePhiNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::phiDefinition));
         n2o(new OperatorDescription<>(ConstantNode.TYPE, SMTLibGeneratorPhase::defaultDeclaration, SMTLibGeneratorPhase::defineConstant));
     }
@@ -357,6 +367,7 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
             StringBuilder declarations = new StringBuilder();
             StringBuilder definitions = new StringBuilder();
             List<ValueNode> definedNodes = new ArrayList<>();
+            NodeMap<Node> knownEq = new NodeMap<>(graph);
             for (Node n : graph.getNodes()) {
                 @SuppressWarnings("unchecked")
                 OperatorDescription<ValueNode> d = (OperatorDescription<ValueNode>) n2o.get(n.getNodeClass());
@@ -367,24 +378,45 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
                     appendCrNonNull(declarations, d.getDeclaration().apply((ValueNode) n));
                     appendCrNonNull(definitions, d.getDefinition().apply((ValueNode) n));
                     definedNodes.add((ValueNode) n);
+                    if ((d.getFlags() & FLAG_EQUIVALENT) != 0) {
+                        for (Node usage : n.inputs()) {
+                            knownEq.set(n, usage);
+                            knownEq.set(usage, n);
+                        }
+                    }
                 }
             }
             SMT smt = new SMT(prologue + declarations + definitions);
             Function<String, Node> s2n = s -> graph.getNode(Integer.parseInt(s.substring(1)));
             smt.addCheck(new ConstantFoldingCheck(s2n, n -> n instanceof ConstantNode));
-            smt.addCheck(new EquivalenceCheck(n -> s2n.apply(n).toString()));
+            BiFunction<String, String, Boolean> isEqKnown = new BiFunction<String, String, Boolean>() {
+                public Boolean apply(String t, String u) {
+                    Node tn = s2n.apply(t);
+                    Node tu = s2n.apply(u);
+                    return knownEq.containsKey(tn) && knownEq.get(tn).equals(tu);
+                }
+            };
+            smt.addCheck(new EquivalenceCheck(isEqKnown, n -> s2n.apply(n).toString()));
             if (!DumpSMTDir.hasDefaultValue()) {
                 dumpSMT(graph, prologue, declarations, definitions);
             }
             CheckResult[] results = check(smt);
             report(graph, results);
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            e.printStackTrace();
+        }
+    }
+
+    private static String getGraphName(StructuredGraph g) {
+        if (g.method() != null) {
+            return g.method().format("%h.%n");
+        } else {
+            return g.toString();
         }
     }
 
     private static void report(StructuredGraph graph, CheckResult[] results) {
-        getDumper().dump(graph.toString(), results);
+        getDumper().dump(getGraphName(graph), results);
         ArrayList<CheckResult> errors = new ArrayList<>();
         for (int i = 0; i < results.length; i++) {
             CheckResult result = results[i];

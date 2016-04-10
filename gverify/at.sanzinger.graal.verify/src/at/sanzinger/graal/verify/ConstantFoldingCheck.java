@@ -13,6 +13,7 @@ import at.sanzinger.boolector.SMTResult;
 import com.oracle.graal.graph.Node;
 
 public class ConstantFoldingCheck implements Function<BoolectorInstance, CheckResult> {
+    private static final String NAME = "Constant folding check";
     private final Function<String, Node> nodeTranslator;
     private final Function<Node, Boolean> isConstant;
 
@@ -43,9 +44,9 @@ public class ConstantFoldingCheck implements Function<BoolectorInstance, CheckRe
             }
         }
         if (constantFoldable.size() == 0) {
-            return new CheckResult(this, CheckResult.State.OK);
+            return new CheckResult(NAME, this, CheckResult.State.OK);
         } else {
-            return new CheckResult(this, CheckResult.State.SUSPICIOUS, constantFoldable.toString());
+            return new CheckResult(NAME, this, CheckResult.State.SUSPICIOUS, constantFoldable.toString());
         }
     }
 

@@ -9,43 +9,55 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import at.sanzinger.boolector.BoolectorInstance;
 import at.sanzinger.boolector.BoolectorInstance.FrameHandle;
 import at.sanzinger.boolector.CheckResult;
+import at.sanzinger.boolector.CheckResult.State;
 import at.sanzinger.boolector.SMTModel;
 import at.sanzinger.boolector.SMTModel.Definition;
 
 public class EquivalenceCheck implements Function<BoolectorInstance, CheckResult> {
-    private final Function<String, String> symbolTranslator;
+    private static final String NAME = "Equivalence check";
 
-    public EquivalenceCheck(Function<String, String> symbolTranslator) {
-        this.symbolTranslator = symbolTranslator;
+    private final Function<String, String> nodeNameTranslator;
+    private final BiFunction<String, String, Boolean> isKnownEquivalence;
+
+    public EquivalenceCheck(BiFunction<String, String, Boolean> isKnownEquivalence, Function<String, String> nodeNameTranslator) {
+        this.nodeNameTranslator = nodeNameTranslator;
+        this.isKnownEquivalence = isKnownEquivalence;
     }
 
     public EquivalenceCheck() {
-        this(n -> n);
+        this((x, y) -> false, n -> n.toString());
     }
 
     @Override
     public CheckResult apply(BoolectorInstance t) {
         try (FrameHandle fh = t.push()) {
             Map<Definition, Definition> equivalences = equivalenceExtraction(t);
-            CheckResult result;
+            String resultString = null;
+            CheckResult.State resultState = State.OK;
             if (equivalences.size() > 0) {
                 StringBuilder sb = new StringBuilder();
                 sb.append("Equivalences found: ");
+                boolean newFound = false;
                 for (Entry<Definition, Definition> d : equivalences.entrySet()) {
-                    String a = symbolTranslator.apply(d.getKey().getName());
-                    String b = symbolTranslator.apply(d.getValue().getName());
-                    sb.append(format("%s==%s, ", a, b));
+                    String a = nodeNameTranslator.apply(d.getKey().getName());
+                    String b = nodeNameTranslator.apply(d.getValue().getName());
+                    if (!isKnownEquivalence.apply(d.getKey().getName(), d.getValue().getName())) {
+                        sb.append(format("%s==%s, ", a, b));
+                        newFound = true;
+                    }
                 }
-                result = new CheckResult(this, CheckResult.State.SUSPICIOUS, sb.substring(0, sb.length() - 2));
-            } else {
-                result = new CheckResult(this, CheckResult.State.OK);
+                if (newFound) {
+                    resultString = sb.substring(0, sb.length() - 2);
+                    resultState = CheckResult.State.ERROR;
+                }
             }
-            return result;
+            return new CheckResult(NAME, this, resultState, resultString);
         }
     }
 
