@@ -1,6 +1,5 @@
 package at.sanzinger.boolector;
 
-import static java.lang.System.lineSeparator;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import java.io.BufferedReader;
@@ -16,10 +15,11 @@ public class BoolectorInstance implements AutoCloseable {
     private final Boolector boolector;
     private boolean opened = false;
     private Process p;
-    private InputStream is;
-    private InputStream errIs;
+    private BufferedReader ir;
+    private BufferedReader errIr;
     private PrintWriter out;
-    private int level = 0;
+    @SuppressWarnings("unused") private int level = 0;
+    private boolean satDone = false;
 
     public BoolectorInstance(Boolector binary) {
         this.boolector = binary;
@@ -28,8 +28,8 @@ public class BoolectorInstance implements AutoCloseable {
     private void ensureOpen() {
         if (opened) {
             if (!p.isAlive()) {
-                String stderrLines = readRemainingLines(errIs);
-                String stdoutLines = readRemainingLines(is);
+                String stderrLines = readRemainingLines(errIr);
+                String stdoutLines = readRemainingLines(ir);
                 throw new RuntimeException("Process died, stdout: " + stdoutLines + " stderr: " + stderrLines);
             }
             return;
@@ -37,26 +37,27 @@ public class BoolectorInstance implements AutoCloseable {
         String[] args = {boolector.getBtorCmd(), "-m", "-i", "-smt2"};
         try {
             p = Runtime.getRuntime().exec(args);
-            is = p.getInputStream();
-            errIs = p.getErrorStream();
+            // is = new BufferedInputStream(.getInputStream();
+            ir = new BufferedReader(new InputStreamReader(p.getInputStream()));
+            errIr = new BufferedReader(new InputStreamReader(p.getErrorStream()));
             out = new PrintWriter(p.getOutputStream());
             opened = true;
         } catch (IOException e) { // Cleanup partially created resources
             if (p != null) {
                 p.destroyForcibly();
             }
-            closeSilent(out, is, errIs);
-            is = null;
+            closeSilent(out, ir, errIr);
+            ir = null;
+            errIr = null;
             out = null;
         }
     }
 
-    private static String readRemainingLines(InputStream is) {
-        BufferedReader r = new BufferedReader(new InputStreamReader(is));
+    private static String readRemainingLines(BufferedReader r) {
         String line;
         StringBuilder lines = new StringBuilder();
         try {
-            while ((line = r.readLine()) != null) {
+            while (r.ready() && (line = r.readLine()) != null) {
                 lines.append('\n');
                 lines.append(line);
             }
@@ -81,6 +82,7 @@ public class BoolectorInstance implements AutoCloseable {
 
     public CheckResult[] execute(SMT smt) {
         ensureOpen();
+        satDone = false;
         printOut(smt.getModel());
         CheckResult[] results = new CheckResult[smt.getChecks().size()];
         int i = 0;
@@ -91,21 +93,32 @@ public class BoolectorInstance implements AutoCloseable {
     }
 
     public void define(String check) {
+        satDone = false;
         ensureOpen();
         printOut(check);
     }
 
     public SMTModel getModel() {
-        printOut("(check-sat)\n(get-model)");
+        if (!satDone) {
+            checkSat();
+        }
         try {
-            List<String> lines = waitForOutputLine(1000, ")", "unsat");
-            if (lines.get(0).equals("unsat")) {
-                return null;
-            } else {
-                return new SMTModel(lines.subList(1, lines.size()));
+            List<String> lines = new ArrayList<>(10);
+            printOut("(get-model)");
+            while (true) {
+                String line = ir.readLine();
+                if (line == null) {
+                    String err = readRemainingLines(errIr);
+                    if (!"".equals(err)) {
+                        throw new RuntimeException(String.format("Boolector printed error: %s", err));
+                    }
+                }
+                lines.add(line);
+                if (")".equals(line)) {
+                    break;
+                }
             }
-        } catch (InterruptedException e) {
-            return null;
+            return new SMTModel(lines);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -114,31 +127,34 @@ public class BoolectorInstance implements AutoCloseable {
     public SMTResult checkSat() {
         ensureOpen();
         printOut("(check-sat)");
-        List<String> lines;
-        long waitUntil = System.currentTimeMillis() + 5000;
+        satDone = true;
         try {
-            do {
-                lines = waitForOutputLine(200, "sat", "unsat");
-            } while (lines == null && waitUntil > System.currentTimeMillis() && errIs.available() == 0);
-            String error = getPendingLines(errIs);
-            SMTResult result = new SMTResult(lines, error);
+            String sat = ir.readLine();
+            StringBuffer error = null;
+            while (errIr.ready()) {
+                if (error == null) {
+                    error = new StringBuffer();
+                }
+                error.append(errIr.readLine());
+            }
+            SMTResult result = new SMTResult(sat, error == null ? null : error.toString());
             return result;
-        } catch (InterruptedException e) {
-            return null;
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
     static String getPendingLines(InputStream is) {
+        return getPendingLines(new BufferedReader(new InputStreamReader(is)));
+    }
+
+    static String getPendingLines(BufferedReader ir) {
         try {
             StringBuilder err = new StringBuilder();
-            while (is.available() > 0) {
-                err.append(readLineWithTimeout(is, 2));
+            while (ir.ready()) {
+                err.append(ir.readLine());
             }
             return err.length() > 0 ? err.toString() : null;
-        } catch (InterruptedException e) {
-            return null;
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -150,83 +166,33 @@ public class BoolectorInstance implements AutoCloseable {
         out.flush();
     }
 
+    @SuppressWarnings("unused")
     private void printIdent(String line, String prefixString) {
-        if (line == null || true) {
-            return;
-        }
-        StringBuilder prefix = new StringBuilder();
-        for (int i = 0; i < level; i++) {
-            prefix.append("  ");
-        }
-        prefix.append(prefixString);
-        System.out.println(prefix + line.replace(System.lineSeparator(), System.lineSeparator() + prefix));
+// StringBuilder prefix = new StringBuilder();
+// for (int i = 0; i < level; i++) {
+// prefix.append("  ");
+// }
+// prefix.append(prefixString);
+// System.out.println(prefix + line.replace(System.lineSeparator(), System.lineSeparator() +
+// prefix));
     }
 
     public void pop() {
+        satDone = false;
         level--;
         printOut("(pop 1)");
     }
 
     public FrameHandle push() {
+        satDone = false;
         ensureOpen();
         printOut("(push 1)");
-        String error = getPendingLines(errIs);
+        String error = getPendingLines(errIr);
         if (error != null) {
             throw new RuntimeException(error);
         }
         level++;
         return new FrameHandle();
-    }
-
-    private static String readLineWithTimeout(InputStream is, int timeout) throws IOException, InterruptedException {
-        int maxLineLength = 4096;
-        long start = System.currentTimeMillis();
-        if (!is.markSupported()) {
-            throw new IllegalArgumentException("This InputStreamReader does not support marking");
-        }
-        is.mark(maxLineLength);
-        byte[] cbuff = new byte[maxLineLength];
-        int offset = 0;
-        while (start + timeout > System.currentTimeMillis() && offset < maxLineLength) {
-            int avail = Math.min(is.available(), maxLineLength - offset);
-            int read = is.read(cbuff, offset, avail);
-            String line = new String(cbuff, 0, offset + read);
-            int lineend = line.indexOf(System.lineSeparator());
-            if (lineend != -1) {
-                is.reset();
-                is.skip(lineend + 1);
-                return line.substring(0, lineend + lineSeparator().length());
-            }
-            offset += read;
-            if (avail == 0) {
-                Thread.sleep(1);
-            }
-        }
-        is.reset();
-        return null;
-    }
-
-    /**
-     * Waits one of lines appear on the output stream and returns the matching string
-     */
-    private List<String> waitForOutputLine(int timeout, String... lines) throws IOException, InterruptedException {
-        List<String> result = new ArrayList<>(10);
-        long start = System.currentTimeMillis();
-        while (start + timeout > System.currentTimeMillis()) {
-            ensureOpen();
-            String line = readLineWithTimeout(is, 2);
-            if (line != null) {
-                line = line.trim();
-                printIdent(line, "<<  ");
-                result.add(line);
-                for (String searchedLine : lines) {
-                    if (line.equals(searchedLine)) {
-                        return result;
-                    }
-                }
-            }
-        }
-        return null;
     }
 
     public void close() {
@@ -239,10 +205,10 @@ public class BoolectorInstance implements AutoCloseable {
         } catch (InterruptedException ie) {
             ie.printStackTrace();
         }
-        closeSilent(out, is, errIs);
+        closeSilent(out, ir, errIr);
         p.destroyForcibly();
         p = null;
-        is = null;
+        ir = null;
         out = null;
         opened = false;
     }

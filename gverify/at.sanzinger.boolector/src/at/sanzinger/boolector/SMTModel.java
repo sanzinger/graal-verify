@@ -2,12 +2,9 @@ package at.sanzinger.boolector;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class SMTModel {
     private final List<String> lines;
-    private static final Pattern defPattern = Pattern.compile("\\(define-fun (\\w+) \\(\\) \\([^)]*\\) ([a-zA-Z_0-9#]+)\\)");
 
     public SMTModel(List<String> lines) {
         this.lines = lines;
@@ -30,10 +27,20 @@ public class SMTModel {
     }
 
     private static Definition definitionFromLine(String line) {
-        Matcher m = defPattern.matcher(line);
-        if (m.matches()) {
-            String name = m.group(1);
-            String value = m.group(2);
+        // we're looking for (define-fun n87 () (_ BitVec 8) #b00000000)
+        int idx = 0;
+        int len = line.length();
+        while (idx < len && line.charAt(idx++) == ' ') {
+            // ignore leading whitespace
+        }
+        idx--;
+        final String defineFun = "(define-fun ";
+        if (line.startsWith(defineFun, idx) && line.endsWith(")")) {
+            int nameStart = idx + defineFun.length();
+            int nameEnd = line.indexOf(' ', nameStart + 1);
+            String name = line.substring(nameStart, nameEnd);
+            int valueStart = line.lastIndexOf(' ') + 1;
+            String value = line.substring(valueStart, line.length() - 1);
             return new Definition(name, value);
         } else {
             return null;

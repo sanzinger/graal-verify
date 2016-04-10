@@ -1,11 +1,16 @@
 package at.sanzinger.boolector;
 
+import java.util.Arrays;
 import java.util.List;
 
 public class SMTResult {
     private final List<String> lines;
     private final String error;
     private String name;
+
+    public SMTResult(String line, String error) {
+        this(Arrays.asList(line), error, null);
+    }
 
     public SMTResult(List<String> lines, String error) {
         this(lines, error, null);
