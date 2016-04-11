@@ -109,9 +109,7 @@ public class BoolectorInstance implements AutoCloseable {
                 String line = ir.readLine();
                 if (line == null) {
                     String err = readRemainingLines(errIr);
-                    if (!"".equals(err)) {
-                        throw new RuntimeException(String.format("Boolector printed error: %s", err));
-                    }
+                    throw new RuntimeException(String.format("Boolector printed error: %s", err));
                 }
                 lines.add(line);
                 if (")".equals(line)) {
@@ -170,7 +168,7 @@ public class BoolectorInstance implements AutoCloseable {
     private void printIdent(String line, String prefixString) {
 // StringBuilder prefix = new StringBuilder();
 // for (int i = 0; i < level; i++) {
-// prefix.append("  ");
+// prefix.append(" ");
 // }
 // prefix.append(prefixString);
 // System.out.println(prefix + line.replace(System.lineSeparator(), System.lineSeparator() +

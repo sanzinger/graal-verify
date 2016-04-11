@@ -14,6 +14,7 @@ import java.util.function.Function;
 
 import com.oracle.graal.debug.Debug;
 import com.oracle.graal.debug.DebugCloseable;
+import com.oracle.graal.debug.DebugMetric;
 import com.oracle.graal.debug.DebugTimer;
 
 import at.sanzinger.boolector.BoolectorInstance;
@@ -25,6 +26,7 @@ import at.sanzinger.boolector.SMTModel.Definition;
 
 public class EquivalenceCheck implements Function<BoolectorInstance, CheckResult> {
     private static final String NAME = "Equivalence check";
+    private static final DebugMetric MODEL_COUNT = Debug.metric("ModelCount");
     private static final DebugTimer DT = Debug.timer("EquivalenceCheck");
 
     private final Function<String, String> nodeNameTranslator;
@@ -96,9 +98,8 @@ public class EquivalenceCheck implements Function<BoolectorInstance, CheckResult
     }
 
     private static SMTModel getModel(BoolectorInstance btor) {
-        try (FrameHandle fh = btor.push()) {
-            return btor.getModel();
-        }
+        MODEL_COUNT.increment();
+        return btor.getModel();
     }
 
     private static void refineP(Set<Set<Definition>> p, Set<Definition> definitions, SMTModel model) {

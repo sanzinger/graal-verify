@@ -3,17 +3,17 @@ package at.sanzinger.graal.verify;
 import java.util.ArrayList;
 import java.util.function.Function;
 
+import com.oracle.graal.debug.Debug;
+import com.oracle.graal.debug.DebugCloseable;
+import com.oracle.graal.debug.DebugTimer;
+import com.oracle.graal.graph.Node;
+
 import at.sanzinger.boolector.BoolectorInstance;
 import at.sanzinger.boolector.BoolectorInstance.FrameHandle;
 import at.sanzinger.boolector.CheckResult;
 import at.sanzinger.boolector.SMTModel;
 import at.sanzinger.boolector.SMTModel.Definition;
 import at.sanzinger.boolector.SMTResult;
-
-import com.oracle.graal.debug.Debug;
-import com.oracle.graal.debug.DebugCloseable;
-import com.oracle.graal.debug.DebugTimer;
-import com.oracle.graal.graph.Node;
 
 public class ConstantFoldingCheck implements Function<BoolectorInstance, CheckResult> {
     private static final String NAME = "Constant folding check";
