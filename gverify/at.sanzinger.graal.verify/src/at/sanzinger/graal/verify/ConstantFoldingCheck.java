@@ -10,10 +10,14 @@ import at.sanzinger.boolector.SMTModel;
 import at.sanzinger.boolector.SMTModel.Definition;
 import at.sanzinger.boolector.SMTResult;
 
+import com.oracle.graal.debug.Debug;
+import com.oracle.graal.debug.DebugCloseable;
+import com.oracle.graal.debug.DebugTimer;
 import com.oracle.graal.graph.Node;
 
 public class ConstantFoldingCheck implements Function<BoolectorInstance, CheckResult> {
     private static final String NAME = "Constant folding check";
+    private static final DebugTimer DT = Debug.timer("ConstantfoldingCheck");
     private final Function<String, Node> nodeTranslator;
     private final Function<Node, Boolean> isConstant;
 
@@ -25,7 +29,7 @@ public class ConstantFoldingCheck implements Function<BoolectorInstance, CheckRe
 
     public CheckResult apply(BoolectorInstance t) {
         ArrayList<SMTResult> constantFoldable = new ArrayList<>();
-        try (FrameHandle h = t.push()) {
+        try (FrameHandle h = t.push(); DebugCloseable dt = DT.start()) {
             SMTModel m = t.getModel();
             for (Definition d : m.getDefinitions()) {
                 Node n = nodeTranslator.apply(d.getName());

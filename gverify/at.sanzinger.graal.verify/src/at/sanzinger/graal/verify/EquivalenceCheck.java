@@ -12,6 +12,10 @@ import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
+import com.oracle.graal.debug.Debug;
+import com.oracle.graal.debug.DebugCloseable;
+import com.oracle.graal.debug.DebugTimer;
+
 import at.sanzinger.boolector.BoolectorInstance;
 import at.sanzinger.boolector.BoolectorInstance.FrameHandle;
 import at.sanzinger.boolector.CheckResult;
@@ -21,6 +25,7 @@ import at.sanzinger.boolector.SMTModel.Definition;
 
 public class EquivalenceCheck implements Function<BoolectorInstance, CheckResult> {
     private static final String NAME = "Equivalence check";
+    private static final DebugTimer DT = Debug.timer("EquivalenceCheck");
 
     private final Function<String, String> nodeNameTranslator;
     private final BiFunction<String, String, Boolean> isKnownEquivalence;
@@ -36,7 +41,7 @@ public class EquivalenceCheck implements Function<BoolectorInstance, CheckResult
 
     @Override
     public CheckResult apply(BoolectorInstance t) {
-        try (FrameHandle fh = t.push()) {
+        try (FrameHandle fh = t.push(); DebugCloseable dt = DT.start()) {
             Map<Definition, Definition> equivalences = equivalenceExtraction(t);
             String resultString = null;
             CheckResult.State resultState = State.OK;
