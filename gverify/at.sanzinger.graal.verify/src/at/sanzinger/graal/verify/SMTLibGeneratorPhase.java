@@ -14,6 +14,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -425,8 +426,8 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
 
                 try (BinaryGraphPrinter printer = new BinaryGraphPrinter(
                                 FileChannel.open(dumpPath, StandardOpenOption.WRITE, Files.exists(dumpPath) ? StandardOpenOption.TRUNCATE_EXISTING : StandardOpenOption.CREATE_NEW))) {
-                    printer.beginGroup(getFileNameForGraph(graph), "", null, -1);
-                    printer.print(graph, errors.toString());
+                    printer.beginGroup(getFileNameForGraph(graph), "", graph.method(), -1, Collections.emptyMap());
+                    printer.print(graph, errors.toString(), Collections.emptyMap());
                     printer.endGroup();
                 }
             } catch (IOException e) {
