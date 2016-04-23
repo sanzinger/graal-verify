@@ -44,7 +44,8 @@ public class EquivalenceCheck implements Function<BoolectorInstance, CheckResult
     @Override
     public CheckResult apply(BoolectorInstance t) {
         try (FrameHandle fh = t.push(); DebugCloseable dt = DT.start()) {
-            Map<Definition, Definition> equivalences = equivalenceExtraction(t);
+            Pair2 pair2 = equivalenceExtraction(t);
+            Map<Definition, Definition> equivalences = pair2.a;
             String resultString = null;
             CheckResult.State resultState = State.OK;
             if (equivalences.size() > 0) {
@@ -64,17 +65,22 @@ public class EquivalenceCheck implements Function<BoolectorInstance, CheckResult
                     resultState = CheckResult.State.ERROR;
                 }
             }
-            return new CheckResult(NAME, this, resultState, resultString);
+            CheckResult result = new CheckResult(NAME, this, resultState, resultString);
+            result.satCount = pair2.checkCount;
+            return result;
         }
     }
 
-    private static HashMap<Definition, Definition> equivalenceExtraction(BoolectorInstance btor) {
+    private static Pair2 equivalenceExtraction(BoolectorInstance btor) {
         SMTModel rootModel = getModel(btor);
         Set<Set<Definition>> p = buildP(rootModel);
         HashMap<Definition, Definition> e = new HashMap<>();
         Pair pair = new Pair();
+        Pair2 result = new Pair2();
+        result.a = e;
         while (getNextPair(pair, p)) {
             SMTModel model;
+            result.checkCount++;
             if ((model = sat(btor, pair.k, pair.l)) != null) {
                 refineP(p, pair.d, model);
             } else {
@@ -82,7 +88,12 @@ public class EquivalenceCheck implements Function<BoolectorInstance, CheckResult
                 pair.d.remove(pair.k);
             }
         }
-        return e;
+        return result;
+    }
+
+    public static class Pair2 {
+        HashMap<Definition, Definition> a;
+        int checkCount = 0;
     }
 
     private static SMTModel sat(BoolectorInstance btor, Definition k, Definition l) {

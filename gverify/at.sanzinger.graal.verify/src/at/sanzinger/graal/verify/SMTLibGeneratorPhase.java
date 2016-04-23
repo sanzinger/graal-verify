@@ -395,6 +395,9 @@ public class SMTLibGeneratorPhase extends BasePhase<LowTierContext> {
                 dumpSMT(graph, prologue, declarations, definitions);
             }
             CheckResult[] results = check(smt);
+            for (CheckResult result : results) {
+                result.nodeCount = graph.getNodeCount();
+            }
             report(graph, results);
         } catch (Exception e) {
             e.printStackTrace();

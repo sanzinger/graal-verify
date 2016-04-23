@@ -29,6 +29,7 @@ public class ConstantFoldingCheck implements Function<BoolectorInstance, CheckRe
 
     public CheckResult apply(BoolectorInstance t) {
         ArrayList<SMTResult> constantFoldable = new ArrayList<>();
+        int checks = 1;
         try (FrameHandle h = t.push(); DebugCloseable dt = DT.start()) {
             SMTModel m = t.getModel();
             for (Definition d : m.getDefinitions()) {
@@ -40,6 +41,7 @@ public class ConstantFoldingCheck implements Function<BoolectorInstance, CheckRe
                     String check = String.format("(assert (not (= %s %s)))", d.getName(), d.getValue());
                     t.define(check);
                     SMTResult result = t.checkSat();
+                    checks++;
                     result.setName(String.format("Node %s is constant with value %s", n, d.getValue()));
                     if (!result.isSat()) {
                         constantFoldable.add(result);
@@ -47,11 +49,14 @@ public class ConstantFoldingCheck implements Function<BoolectorInstance, CheckRe
                 }
             }
         }
+        CheckResult cr;
         if (constantFoldable.size() == 0) {
-            return new CheckResult(NAME, this, CheckResult.State.OK);
+            cr = new CheckResult(NAME, this, CheckResult.State.OK);
         } else {
-            return new CheckResult(NAME, this, CheckResult.State.SUSPICIOUS, constantFoldable.toString());
+            cr = new CheckResult(NAME, this, CheckResult.State.ERROR, constantFoldable.toString());
         }
+        cr.satCount = checks;
+        return cr;
     }
 
     @Override

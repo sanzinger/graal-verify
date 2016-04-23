@@ -7,6 +7,9 @@ public class CheckResult {
     private final Function<BoolectorInstance, CheckResult> check;
     private final State state;
     private final String message;
+    public long duration;
+    public int nodeCount;
+    public int satCount;
 
     public CheckResult(String name, Function<BoolectorInstance, CheckResult> check, State state) {
         this(name, check, state, null);

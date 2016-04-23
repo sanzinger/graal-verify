@@ -87,7 +87,10 @@ public class BoolectorInstance implements AutoCloseable {
         CheckResult[] results = new CheckResult[smt.getChecks().size()];
         int i = 0;
         for (Function<BoolectorInstance, CheckResult> c : smt.getChecks()) {
-            results[i++] = c.apply(this);
+            long start = System.nanoTime();
+            CheckResult result = c.apply(this);
+            result.duration = System.nanoTime() - start;
+            results[i++] = result;
         }
         return results;
     }
